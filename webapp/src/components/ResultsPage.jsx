@@ -1,4 +1,5 @@
 import ChatPanel from './ChatPanel';
+import ScoreGauge from './ScoreGauge';
 
 const severityColor = {
     high: 'border-red-500 bg-red-500/10 text-red-300',
@@ -12,6 +13,7 @@ const ResultsPage = ({ data, onReset }) => {
     const {
         session_id,
         product,
+        product_score,
         ingredients,
         umbrella_terms,
         allergen_statements,
@@ -32,6 +34,71 @@ const ResultsPage = ({ data, onReset }) => {
                 {product?.brand && <p className="text-lg text-gray-300">{product.brand}</p>}
                 {product?.barcode && <p className="text-xs text-gray-500 mt-1">Barcode: {product.barcode}</p>}
             </div>
+
+            {/* Product Score */}
+            {product_score && (
+                <div className="glass-strong p-8 mb-6 text-center animate-slide-up">
+                    <h2 className="text-2xl font-bold mb-4 text-white">Product Score</h2>
+                    <ScoreGauge score={Math.round(product_score.score)} />
+                    <div className="mt-4">
+                        <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-bold tracking-wide ${
+                            product_score.grade === 'A' ? 'bg-green-500/20 text-green-400' :
+                            product_score.grade === 'B' ? 'bg-emerald-500/20 text-emerald-400' :
+                            product_score.grade === 'C' ? 'bg-yellow-500/20 text-yellow-400' :
+                            product_score.grade === 'D' ? 'bg-orange-500/20 text-orange-400' :
+                            'bg-red-500/20 text-red-400'
+                        }`}>
+                            Grade {product_score.grade}
+                        </span>
+                    </div>
+
+                    {/* Score breakdown */}
+                    <div className="mt-6 grid sm:grid-cols-2 gap-4 text-left max-w-xl mx-auto">
+                        {product_score.reasons_good?.length > 0 && (
+                            <div>
+                                <h3 className="text-sm font-semibold text-green-400 mb-2">✓ Positives</h3>
+                                <ul className="space-y-1 text-xs text-gray-300">
+                                    {product_score.reasons_good.slice(0, 4).map((r, i) => (
+                                        <li key={i}>• {r}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                        {product_score.reasons_bad?.length > 0 && (
+                            <div>
+                                <h3 className="text-sm font-semibold text-red-400 mb-2">✗ Concerns</h3>
+                                <ul className="space-y-1 text-xs text-gray-300">
+                                    {product_score.reasons_bad.slice(0, 4).map((r, i) => (
+                                        <li key={i}>• {r}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
+
+                    {product_score.personalized_conflicts?.length > 0 && (
+                        <div className="mt-4 text-left max-w-xl mx-auto">
+                            <h3 className="text-sm font-semibold text-orange-400 mb-2">⚠ Personal Conflicts</h3>
+                            <ul className="space-y-1 text-xs text-gray-300">
+                                {product_score.personalized_conflicts.map((c, i) => (
+                                    <li key={i}>• {c}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {product_score.uncertainties?.length > 0 && (
+                        <div className="mt-4 text-left max-w-xl mx-auto">
+                            <h3 className="text-sm font-semibold text-yellow-400 mb-2">? Uncertainties</h3>
+                            <ul className="space-y-1 text-xs text-gray-300">
+                                {product_score.uncertainties.map((u, i) => (
+                                    <li key={i}>• {u}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Personalized Summary */}
             {personalized_summary && (

@@ -46,6 +46,17 @@ class Flag(BaseModel):
     citation_ids: List[str] = Field(default_factory=list)
 
 # ──────────────────────────────────────────────
+# Product score (from scorer.py)
+# ──────────────────────────────────────────────
+class ProductScore(BaseModel):
+    score: float = 50.0
+    grade: str = "C"
+    reasons_good: List[str] = Field(default_factory=list)
+    reasons_bad: List[str] = Field(default_factory=list)
+    uncertainties: List[str] = Field(default_factory=list)
+    personalized_conflicts: List[str] = Field(default_factory=list)
+
+# ──────────────────────────────────────────────
 # Full analysis result returned to frontend
 # ──────────────────────────────────────────────
 class ProductMeta(BaseModel):
@@ -63,6 +74,7 @@ class AnalysisResult(BaseModel):
     allergen_statements: List[str] = Field(default_factory=list)
     flags: List[Flag] = Field(default_factory=list)
     evidence: List[EvidenceSnippet] = Field(default_factory=list)
+    product_score: Optional[ProductScore] = None
     personalized_summary: str = ""
     disclaimer: str = "Educational only; not medical advice."
 

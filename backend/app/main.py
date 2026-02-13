@@ -30,6 +30,7 @@ from . import models
 from .schemas import (
     BarcodeScanRequest, ChatRequest, ChatResponse,
     AnalysisResult, ProductMeta, UserProfile, EvidenceSnippet,
+    ProductScore,
 )
 from .services.off_service import fetch_product_from_off
 from .services.gemini_service import (
@@ -44,6 +45,7 @@ from .services.validators import (
     validate_personalized_summary,
     validate_chat_answer,
 )
+from .services.scorer import calculate_product_score
 
 # ── Create tables ────────────────────────────────────────────────
 models.Base.metadata.create_all(bind=engine)
@@ -143,7 +145,7 @@ async def _run_analysis_pipeline(
 
     # 2. KB lookup
     canonical_names = [i.name_canonical for i in structured.ingredients]
-    evidence, _ = lookup_ingredients(canonical_names)
+    evidence, matched_entries = lookup_ingredients(canonical_names)
 
     # 3. Deterministic rules
     flags = run_rules(structured.ingredients, profile, evidence)
@@ -159,7 +161,20 @@ async def _run_analysis_pipeline(
         evidence=evidence,
     )
 
-    # 5. Personalized summary via Gemini
+    # 5. Product score
+    try:
+        ingredient_names = [i.name_canonical for i in structured.ingredients]
+        score_dict = calculate_product_score(
+            ingredient_names,
+            matched_entries=matched_entries,
+            user_profile=profile.model_dump(),
+        )
+        result.product_score = ProductScore(**score_dict)
+    except Exception as exc:
+        logger.error("Scoring failed: %s", exc)
+        result.product_score = None
+
+    # 6. Personalized summary via Gemini
     try:
         summary_result = await gemini_personalized_explain(profile, result, evidence)
         valid_ids = {e.citation_id for e in evidence}
@@ -170,7 +185,7 @@ async def _run_analysis_pipeline(
         logger.error("Gemini summary failed: %s", exc)
         result.personalized_summary = "Summary unavailable – please try again."
 
-    # 6. Persist
+    # 7. Persist
     _save_session(db, result, profile)
 
     return result
