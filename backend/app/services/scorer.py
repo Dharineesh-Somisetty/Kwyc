@@ -1,207 +1,264 @@
-import pandas as pd
-from typing import List, Dict, Any
+"""Product scoring engine (generic grocery products).
 
-# ==========================================
-# 1. HEURISTIC RULES (The "Common Sense" Logic)
-# ==========================================
-# Instead of exact matches, we look for these substrings.
-# Priority: High to Low (e.g., check 'whey' before 'protein')
-KEYWORD_RULES = [
-    # --- High Quality Proteins ---
-    {'tag': 'whey',       'type': 'Protein', 'bio': 100, 'bloat': 2},
-    {'tag': 'casein',     'type': 'Protein', 'bio': 90,  'bloat': 2},
-    {'tag': 'egg white',  'type': 'Protein', 'bio': 100, 'bloat': 1},
-    {'tag': 'beef',       'type': 'Protein', 'bio': 90,  'bloat': 0},
-    
-    # --- Medium/Plant Proteins ---
-    {'tag': 'soy',        'type': 'Protein', 'bio': 70,  'bloat': 3},
-    {'tag': 'pea',        'type': 'Protein', 'bio': 75,  'bloat': 4},
-    {'tag': 'hemp',       'type': 'Protein', 'bio': 60,  'bloat': 2},
-    {'tag': 'collagen',   'type': 'Protein', 'bio': 30,  'bloat': 0}, # Low muscle building
-    {'tag': 'gluten',     'type': 'Protein', 'bio': 25,  'bloat': 8}, # Wheat gluten
-    
-    # --- Carbs / Sugars (The "Cut" Killers) ---
-    {'tag': 'sugar',      'type': 'Carb',    'bio': 0,   'bloat': 2},
-    {'tag': 'syrup',      'type': 'Carb',    'bio': 0,   'bloat': 3},
-    {'tag': 'dextrose',   'type': 'Carb',    'bio': 0,   'bloat': 1},
-    {'tag': 'maltodextrin','type':'Carb',    'bio': 0,   'bloat': 4},
-    {'tag': 'oat',        'type': 'Carb',    'bio': 0,   'bloat': 1},
-    {'tag': 'flour',      'type': 'Carb',    'bio': 0,   'bloat': 2},
-    
-    # --- The "Bad" Stuff (Bloat/Inflammation) ---
-    {'tag': 'maltitol',   'type': 'Sweetener', 'bio': 0, 'bloat': 9}, # High penalty
-    {'tag': 'sorbitol',   'type': 'Sweetener', 'bio': 0, 'bloat': 8},
-    {'tag': 'xylitol',    'type': 'Sweetener', 'bio': 0, 'bloat': 7},
-    {'tag': 'palm oil',   'type': 'Fat',       'bio': 0, 'bloat': 2},
-    {'tag': 'vegetable oil','type':'Fat',      'bio': 0, 'bloat': 4},
-    
-    # --- Generic Fallbacks ---
-    {'tag': 'protein',    'type': 'Protein', 'bio': 60,  'bloat': 2}, # Generic protein
-    {'tag': 'gum',        'type': 'Additive','bio': 0,   'bloat': 5}, # Thickeners
+Design goals:
+- Score any food/drink product using ingredient list (+ optional KB tags + user profile).
+- Keep scoring deterministic and explainable (LLM can *explain* the score, but does not decide it).
+- Provide a breakdown so the UI can show "why".
 
-    # --- Vitamins & Minerals (The "Micro" Fix) ---
-    {'tag': 'vitamin',    'type': 'Micronutrient', 'bio': 100, 'bloat': 0},
-    {'tag': 'ascorbic',   'type': 'Micronutrient', 'bio': 100, 'bloat': 0}, # Vitamin C
-    {'tag': 'zinc',       'type': 'Micronutrient', 'bio': 100, 'bloat': 0},
-    {'tag': 'magnesium',  'type': 'Micronutrient', 'bio': 100, 'bloat': 1}, # Some forms bloat
-    {'tag': 'calcium',    'type': 'Micronutrient', 'bio': 80,  'bloat': 0},
-    {'tag': 'iron',       'type': 'Micronutrient', 'bio': 80,  'bloat': 2}, # Can cause stomach upset
-    {'tag': 'niacin',     'type': 'Micronutrient', 'bio': 100, 'bloat': 0}, # Vitamin B3
+IMPORTANT:
+- Scores are subjective heuristics; treat as guidance, not medical advice.
+"""
 
-    # --- US-Specific "Bad" Ingredients (The American Diet) ---
-    {'tag': 'high fructose', 'type': 'Sugar', 'bio': 0, 'bloat': 8}, # HFCS (Huge in US)
-    {'tag': 'corn syrup',    'type': 'Sugar', 'bio': 0, 'bloat': 5},
-    {'tag': 'soybean oil',   'type': 'Fat',   'bio': 0, 'bloat': 4}, # Most common US cheap fat
-    {'tag': 'canola',        'type': 'Fat',   'bio': 0, 'bloat': 3},
-    {'tag': 'red 40',        'type': 'Additive', 'bio': 0, 'bloat': 2}, # US Artificial Color
-    {'tag': 'yellow 5',      'type': 'Additive', 'bio': 0, 'bloat': 2},
-    {'tag': 'blue 1',        'type': 'Additive', 'bio': 0, 'bloat': 2},
-    {'tag': 'enriched flour','type': 'Carb',  'bio': 0, 'bloat': 3}, # US processed wheat
-    {'tag': 'carrageenan',   'type': 'Additive', 'bio': 0, 'bloat': 6}, # Common US thickener (gut irritant)
-]
+from __future__ import annotations
 
-def analyze_ingredient_heuristic(ingredient_name: str) -> dict:
+import math
+import re
+from typing import Any, Dict, List, Optional, Tuple
+
+
+# -----------------------------
+# Helpers
+# -----------------------------
+
+_NORMALIZE_RE = re.compile(r"[^a-z0-9\s]+")
+
+
+def _normalize(text: str) -> str:
+    t = text.lower().strip().replace("-", " ").replace("_", " ")
+    t = _NORMALIZE_RE.sub(" ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _decay_weight(i: int, base: float = 0.70) -> float:
+    """Earlier ingredients typically appear in larger amounts."""
+    return base ** i
+
+
+def _grade(score: float) -> str:
+    if score >= 90:
+        return "A"
+    if score >= 80:
+        return "B"
+    if score >= 70:
+        return "C"
+    if score >= 60:
+        return "D"
+    return "F"
+
+
+# -----------------------------
+# Tag weights (tunable)
+# Positive values = bonuses; negative values = penalties
+# -----------------------------
+
+TAG_WEIGHTS: Dict[str, float] = {
+    # Processing / additives
+    "added-sugar": -14.0,
+    "artificial-sweetener": -6.0,
+    "sugar-alcohol": -5.0,
+    "artificial-color": -5.0,
+    "preservative": -3.0,
+    "emulsifier": -2.0,
+    "thickener": -1.5,
+    "additive": -1.0,
+    "umbrella-term": -3.0,
+
+    # Ingredient types (soft signals)
+    "oil": -1.5,
+    "gluten": -0.5,  # not "bad"; only relevant for gluten-free users (handled separately)
+    "fiber": +2.0,
+    "produce": +1.0,
+    "grain": +0.5,
+    "legume": +0.5,
+    "seed-or-nut": +0.5,
+}
+
+# Words to detect when KB coverage is missing (fallback heuristics)
+UMB_TERMS = {"natural flavors", "natural flavour", "spices", "seasonings", "flavoring", "colour", "color", "artificial flavors"}
+SUGAR_TERMS = {"sugar", "syrup", "dextrose", "fructose", "glucose", "maltodextrin", "honey", "molasses"}
+SWEETENER_TERMS = {"sucralose", "acesulfame", "aspartame", "saccharin", "stevia", "monk fruit", "erythritol", "xylitol", "sorbitol", "maltitol"}
+COLOR_TERMS = {"red 40", "yellow 5", "yellow 6", "blue 1", "blue 2", "caramel color", "titanium dioxide"}
+PRESERVATIVE_TERMS = {"sodium benzoate", "potassium sorbate", "calcium propionate", "sodium nitrite", "sodium nitrate"}
+
+CAFFEINE_TERMS = {"caffeine", "guarana", "coffee", "tea extract", "green tea", "yerba mate"}
+
+
+def infer_tags_fallback(ingredient: str) -> List[str]:
+    """Fallback tagging when KB is missing. Conservative, substring-based."""
+    n = _normalize(ingredient)
+    tags: List[str] = []
+
+    # umbrella terms
+    if any(term in n for term in ["natural flavor", "artificial flavor", "spice", "seasoning", "flavoring"]):
+        tags.append("umbrella-term")
+
+    # added sugars (broad)
+    if any(term in n for term in ["sugar", "syrup", "dextrose", "fructose", "glucose", "maltodextrin", "molasses", "honey"]):
+        tags.append("added-sugar")
+
+    # sweeteners
+    if any(term in n for term in ["sucralose", "acesulfame", "aspartame", "saccharin", "stevia", "monk fruit"]):
+        tags.append("artificial-sweetener")
+    if any(term in n for term in ["erythritol", "xylitol", "sorbitol", "maltitol", "mannitol"]):
+        tags.append("sugar-alcohol")
+
+    # colors
+    if any(term in n for term in ["red 40", "yellow 5", "yellow 6", "blue 1", "blue 2", "caramel color", "titanium dioxide"]):
+        tags.append("artificial-color")
+
+    # preservatives
+    if any(term in n for term in ["sodium benzoate", "potassium sorbate", "calcium propionate", "sodium nitrite", "sodium nitrate"]):
+        tags.append("preservative")
+
+    # oils
+    if "oil" in n and "essential oil" not in n:
+        tags.append("oil")
+
+    return list(dict.fromkeys(tags))
+
+
+def _user_allergy_hit(user_profile: Dict[str, Any], ingredient_norm: str, tags: List[str]) -> Optional[str]:
+    allergies = [a.strip().lower() for a in (user_profile.get("allergies") or []) if a]
+    if not allergies:
+        return None
+    # Simple name match
+    for a in allergies:
+        if a in ingredient_norm or ingredient_norm in a:
+            return a
+    # Tag-based match (if you store allergen tags in KB like allergen-milk, allergen-peanut)
+    for t in tags:
+        if t.startswith("allergen-"):
+            allergen = t.replace("allergen-", "")
+            if allergen in allergies:
+                return allergen
+    return None
+
+
+def calculate_product_score(
+    ingredients: List[str],
+    matched_entries: Optional[Dict[str, Dict]] = None,
+    user_profile: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Score a product based on ingredients, optional KB matches, and optional user profile.
+
+    Returns:
+      {
+        "score": float,
+        "grade": "A|B|C|D|F",
+        "reasons_good": [str],
+        "reasons_bad": [str],
+        "uncertainties": [str],
+        "personalized_conflicts": [str],
+      }
     """
-    Scans the ingredient string for keywords to guess its properties.
-    """
-    clean_name = ingredient_name.lower()
-    
-    for rule in KEYWORD_RULES:
-        if rule['tag'] in clean_name:
-            return rule
-            
-    # Default if absolutely nothing matches (e.g., "Water", "Natural Flavors")
-    return {'type': 'Other', 'bio': 0, 'bloat': 0}
+    if not ingredients:
+        return {
+            "score": 50.0,
+            "grade": "C",
+            "reasons_good": [],
+            "reasons_bad": ["No ingredient list provided."],
+            "uncertainties": ["Unable to score without ingredients."],
+            "personalized_conflicts": [],
+        }
 
-# ==========================================
-# 2. THE SCORING ENGINE
-# ==========================================
-def calculate_apex_score(ingredients: List[str], mode: str) -> Dict[str, Any]:
-    final_score = 0.0
-    good_ingredients = []
-    bad_ingredients = []
-    warnings = []
-    analysis_log = []
-    
-    current_weight = 1.0
-    decay_factor = 0.85 # Higher decay ensures top 3 ingredients dominate the score
-    
-    analysis_log.append(f"🔎 Analyzing {len(ingredients)} ingredients in {mode} mode.")
+    matched_entries = matched_entries or {}
+    user_profile = user_profile or {}
 
-    # 1. Normalize Ingredient List (Handle OFF format quirks)
-    # OFF sometimes sends "en:sugar", so we clean it just in case
-    clean_ingredients = [i.replace("en:", "").replace("-", " ") for i in ingredients]
+    score = 100.0
+    uncertainties: List[str] = []
+    conflicts: List[str] = []
 
-    for ingredient in clean_ingredients:
-        ing_clean = ingredient.lower().strip()
-        
-        # --- LOGIC UPGRADE: HEURISTIC LOOKUP ---
-        # Instead of failing on lookup, we "guess" based on the name
-        data = analyze_ingredient_heuristic(ing_clean)
-        
-        ing_type = data['type']
-        bioavailability = data['bio']
-        bloat_risk = data['bloat']
-        
-        points_gained = 0
-        penalty_applied = 0
-        
-        # --- SCORING RULES ---
-        
-        # A. Proteins Build Score
-        if ing_type == 'Protein':
-            # Logic: 100 bio * weight 1.0 = 100 pts.
-            # We cap generic "protein" keywords lower so they don't game the system.
-            points = (bioavailability) * current_weight
-            
-            # Cap max points per ingredient to avoid overflow
-            points = min(points, 40) 
-            
-            final_score += points
-            good_ingredients.append(f"{ingredient} (+{points:.1f})")
+    # track contributions for explanation
+    contributions: List[Tuple[float, str]] = []
 
-        # E. Micronutrient Bonus
-        if ing_type == 'Micronutrient':
-             # Small flat bonus for vitamins (don't decay weight as heavily)
-             final_score += 5.0
-             good_ingredients.append(f"{ingredient} (Essential)")
+    for i, ing in enumerate(ingredients):
+        ing_norm = _normalize(ing)
+        entry = matched_entries.get(ing)
+        tags = (entry.get("tags") if entry else None) or infer_tags_fallback(ing_norm)
 
-        # B. Bloat Penalties (Universal)
-        if bloat_risk >= 5:
-            penalty = 15.0 # Harsh penalty for bloat
-            final_score -= penalty
-            bad_ingredients.append(f"{ingredient} (Bloat Risk)")
-            warnings.append(f"⚠️ High Bloat: {ingredient}")
+        # Personalized hard constraints
+        allergy_hit = _user_allergy_hit(user_profile, ing_norm, tags)
+        if allergy_hit:
+            conflicts.append(f"Allergy match: '{allergy_hit}' appears in ingredient '{ing}'.")
+            # Hard fail for allergy conflicts
+            return {
+                "score": 0.0,
+                "grade": "F",
+                "reasons_good": [],
+                "reasons_bad": ["Contains an ingredient that matches a declared allergy."],
+                "uncertainties": [],
+                "personalized_conflicts": conflicts,
+            }
 
-        # C. Contextual Penalties (CUT vs BULK)
-        if mode == 'CUT':
-            # In Cut, we hate Sugar and Carbs early in the list
-            if ing_type == 'Carb' or ing_type == 'Sweetener':
-                # Higher penalty if it's the 1st or 2nd ingredient
-                impact_score = 20.0 * current_weight
-                if impact_score > 5:
-                    final_score -= impact_score
-                    bad_ingredients.append(f"{ingredient} (Carb)")
-        
-        elif mode == 'BULK':
-            # In Bulk, we actually LIKE safe carbs (Oats/Rice)
-            if ing_type == 'Carb' and bloat_risk < 3:
-                bonus = 5.0 * current_weight
-                final_score += bonus
-                good_ingredients.append(f"{ingredient} (Fuel)")
+        # Diet conflicts (simple; best handled in rules engine too)
+        vegan = bool(user_profile.get("vegan"))
+        vegetarian = bool(user_profile.get("vegetarian"))
+        halal = bool(user_profile.get("halal"))
 
-        # D. The "Trash Filler" Penalty
-        # If the first ingredient is Sugar or Palm Oil, automatic Fail.
-        if current_weight == 1.0 and (ing_type == 'Sweetener' or ing_type == 'Carb') and mode == 'CUT':
-             final_score -= 30
-             warnings.append("❌ Primary ingredient is Sugar/Carb")
+        if vegan and ("animal-derived" in tags or "dairy" in tags):
+            conflicts.append(f"Vegan preference conflict: '{ing}' may be animal-derived.")
+        if vegetarian and ("animal-derived" in tags):
+            conflicts.append(f"Vegetarian preference conflict: '{ing}' is animal-derived.")
+        # Halal is nuanced; treat animal-derived as "needs verification"
+        if halal and ("animal-derived" in tags):
+            uncertainties.append(f"Halal verification needed for: '{ing}' (source/process not specified).")
 
-        # E. Categorization Catch-All (User Request)
-        # If it's not "Good" and hasn't been flagged "Bad" yet, check if it should be a concern.
-        # We check if the ingredient string (or a substring) is already in the list to avoid dupes, 
-        # but easier to track status flags.
-        
-        is_good = any(ingredient in s for s in good_ingredients)
-        is_bad = any(ingredient in s for s in bad_ingredients)
-        
-        if not is_good and not is_bad:
-            # If it's Fat, Sweetener, Additive, or non-bonus Carb -> Concern
-            if ing_type in ['Fat', 'Sweetener', 'Additive', 'Carb']:
-                # Penalize slightly? Or just list it? 
-                # User said "go to concerns", implying visual. 
-                # Let's deduct tiny points to reflect "Empty" status if we want, 
-                # or just list it. Let's just list it.
-                bad_ingredients.append(f"{ingredient} (Low Quality/Empty)")
-                
-                # Optional: slight penalty for accumulation of trash?
-                final_score -= 1.0 
-        
-        # Decay weight for next item
-        current_weight *= decay_factor
+        # Caffeine limit heuristics
+        caffeine_limit = user_profile.get("caffeineLimitMg")
+        if caffeine_limit is not None:
+            if any(term in ing_norm for term in ["caffeine", "guarana", "yerba mate", "tea extract", "coffee"]):
+                uncertainties.append("Caffeine present but amount (mg) may not be available from ingredients alone.")
+                contributions.append((-2.0 * _decay_weight(i), f"Caffeine source detected: {ing}"))
+                score -= 2.0 * _decay_weight(i)
 
-    # --- FINAL MATH ---
-    # Normalize score. If we found NO protein, the score shouldn't be high.
-    if not good_ingredients and final_score > 0:
-        final_score = final_score * 0.3 # Slash score if it's just "safe" but not "active"
+        # Processing-related scoring via tags
+        w = _decay_weight(i)
+        for t in tags:
+            if t in TAG_WEIGHTS:
+                delta = TAG_WEIGHTS[t] * w
+                score += delta
+                if abs(delta) >= 0.5:
+                    label = f"{t} ({'+' if delta>0 else ''}{delta:.1f}) from {ing}"
+                    contributions.append((delta, label))
 
-    # Clamp 0-100
-    final_score = max(0.0, min(100.0, final_score))
+        # Umbrella term uncertainty
+        if "umbrella-term" in tags:
+            uncertainties.append(f"Umbrella term may hide specific components: '{ing}'")
 
-    # Verdict Generation
-    if final_score >= 80:
-        verdict = "🏆 Apex Fuel"
-    elif final_score >= 60:
-        verdict = "✅ Solid Choice"
-    elif final_score >= 40:
-        verdict = "⚠️ Mediocre"
-    else:
-        verdict = "❌ Trash"
+    # Apply diet conflict penalty softly (rules engine should handle strict blocking)
+    if conflicts:
+        # small penalty per conflict, capped
+        penalty = min(25.0, 6.0 * len(conflicts))
+        score -= penalty
+        contributions.append((-penalty, "Personal preference conflicts present"))
+
+    # Clamp score
+    score = max(0.0, min(100.0, score))
+
+    # Build reasons: pick top deltas
+    contributions_sorted = sorted(contributions, key=lambda x: x[0])
+    bad = [c[1] for c in contributions_sorted[:6] if c[0] < 0]
+    good = [c[1] for c in reversed(contributions_sorted[-6:]) if c[0] > 0]
+
+    # De-duplicate uncertainties
+    uncertainties = list(dict.fromkeys(uncertainties))
 
     return {
-        "final_score": round(final_score, 1),
-        "verdict": verdict,
-        "good_ingredients": good_ingredients,
-        "bad_ingredients": bad_ingredients,
-        "warnings": warnings,
-        "analysis_log": analysis_log
+        "score": round(score, 1),
+        "grade": _grade(score),
+        "reasons_good": good,
+        "reasons_bad": bad,
+        "uncertainties": uncertainties,
+        "personalized_conflicts": conflicts,
     }
+
+
+# -----------------------------
+# Backwards compatibility
+# -----------------------------
+def calculate_apex_score(ingredients: List[str], goal: str = "general") -> Dict[str, Any]:
+    """Legacy wrapper around the new scoring engine.
+    goal is ignored in the new generic scoring, but kept to avoid breaking imports.
+    """
+    return calculate_product_score(ingredients)
