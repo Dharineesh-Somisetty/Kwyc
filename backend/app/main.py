@@ -30,13 +30,14 @@ from . import models
 from .schemas import (
     BarcodeScanRequest, ChatRequest, ChatResponse,
     AnalysisResult, ProductMeta, UserProfile, EvidenceSnippet,
-    ProductScore,
+    ProductScore, Nutrition, NutritionFacts, LabelExtraction,
 )
 from .services.off_service import fetch_product_from_off
-from .services.gemini_service import (
-    gemini_structure_ingredients,
-    gemini_personalized_explain,
-    gemini_product_chat,
+from .services.groq_service import (
+    extract_label_sections,
+    groq_structure_ingredients,
+    groq_personalized_explain,
+    groq_product_chat,
 )
 from .services.kb_service import lookup_ingredients
 from .services.rules_engine import run_rules
@@ -131,16 +132,65 @@ def _get_session(db: DBSession, session_id: str) -> models.Session | None:
     return db.query(models.Session).filter(models.Session.session_id == session_id).first()
 
 
+# ── Nutrition normalization (per-serving → per-100g) ─────────────
+def nutrition_to_per_100g(
+    n: NutritionFacts,
+) -> tuple[dict | None, list[str]]:
+    """Convert per-serving NutritionFacts to per-100g dict for the scorer.
+
+    Returns (nutrition_dict_or_None, notes).
+    Only converts if serving_size_value is present and unit is g or ml.
+    Never infers missing numeric values.
+    """
+    notes: list[str] = []
+
+    if n.serving_size_value is None or n.serving_size_value <= 0:
+        notes.append("Serving size value missing; cannot normalize to per-100g.")
+        return None, notes
+
+    unit = (n.serving_size_unit or "").lower().strip()
+    if unit not in ("g", "ml"):
+        notes.append(
+            f"Serving size unit is '{n.serving_size_unit}'; "
+            "cannot normalize to per-100g (need g or ml)."
+        )
+        return None, notes
+
+    factor = 100.0 / n.serving_size_value
+
+    result: dict = {
+        "energy_kcal_100g": round(n.calories * factor, 1) if n.calories is not None else None,
+        "sugars_g_100g": round(n.total_sugars_g * factor, 1) if n.total_sugars_g is not None else None,
+        "sat_fat_g_100g": round(n.saturated_fat_g * factor, 1) if n.saturated_fat_g is not None else None,
+        "sodium_mg_100g": round(n.sodium_mg * factor, 1) if n.sodium_mg is not None else None,
+        "fiber_g_100g": round(n.fiber_g * factor, 1) if n.fiber_g is not None else None,
+        "protein_g_100g": round(n.protein_g * factor, 1) if n.protein_g is not None else None,
+        "source": "label_photo",
+        "uncertainties": [],
+    }
+
+    # Check if we have at least some useful data
+    key_fields = [k for k in result if k not in ("source", "uncertainties") and result[k] is not None]
+    if not key_fields:
+        notes.append("No numeric nutrition values extracted; cannot compute per-100g.")
+        return None, notes
+
+    return result, notes
+
+
 async def _run_analysis_pipeline(
     ingredients_raw_text: str,
     product: ProductMeta,
     profile: UserProfile,
     db: DBSession,
+    nutrition: Optional[Nutrition] = None,
+    product_categories: Optional[list[str]] = None,
+    nutrition_per_serving: Optional[NutritionFacts] = None,
 ) -> AnalysisResult:
-    """Shared pipeline: structure → KB → rules → summary → persist."""
+    """Shared pipeline: structure → KB → rules → score → summary → persist."""
 
-    # 1. Structure ingredients via Gemini
-    structured = await gemini_structure_ingredients(ingredients_raw_text)
+    # 1. Structure ingredients via Groq
+    structured = await groq_structure_ingredients(ingredients_raw_text)
     structured = validate_structured_ingredients(structured)
 
     # 2. KB lookup
@@ -159,30 +209,40 @@ async def _run_analysis_pipeline(
         allergen_statements=structured.allergen_statements,
         flags=flags,
         evidence=evidence,
+        nutrition=nutrition,
     )
 
     # 5. Product score
     try:
         ingredient_names = [i.name_canonical for i in structured.ingredients]
+        nut_dict = nutrition.model_dump(exclude={"source", "uncertainties"}) if nutrition else None
+        # Prepare per-serving dict for scorer fallback
+        per_serving_dict = (
+            nutrition_per_serving.model_dump() if nutrition_per_serving else None
+        )
         score_dict = calculate_product_score(
             ingredient_names,
             matched_entries=matched_entries,
             user_profile=profile.model_dump(),
+            nutrition=nut_dict,
+            nutrition_per_serving=per_serving_dict,
+            product_name=product.name,
+            product_categories=product_categories,
         )
         result.product_score = ProductScore(**score_dict)
     except Exception as exc:
         logger.error("Scoring failed: %s", exc)
         result.product_score = None
 
-    # 6. Personalized summary via Gemini
+    # 6. Personalized summary via Groq
     try:
-        summary_result = await gemini_personalized_explain(profile, result, evidence)
+        summary_result = await groq_personalized_explain(profile, result, evidence)
         valid_ids = {e.citation_id for e in evidence}
         detected = {i.name_canonical for i in structured.ingredients}
         summary_result = validate_personalized_summary(summary_result, valid_ids, detected)
         result.personalized_summary = summary_result.summary
     except Exception as exc:
-        logger.error("Gemini summary failed: %s", exc)
+        logger.error("Groq summary failed: %s", exc)
         result.personalized_summary = "Summary unavailable – please try again."
 
     # 7. Persist
@@ -209,7 +269,19 @@ async def scan_barcode(req: BarcodeScanRequest, db: DBSession = Depends(get_db))
         barcode=req.barcode,
     )
 
-    result = await _run_analysis_pipeline(ingredients_text, product, req.user_profile, db)
+    # Build Nutrition model from OFF nutriments (may be None)
+    nutrition_obj: Optional[Nutrition] = None
+    raw_nut = off.get("nutriments")
+    if raw_nut:
+        nutrition_obj = Nutrition(**raw_nut)
+
+    categories = off.get("categories") or []
+
+    result = await _run_analysis_pipeline(
+        ingredients_text, product, req.user_profile, db,
+        nutrition=nutrition_obj,
+        product_categories=categories,
+    )
     return result
 
 
@@ -220,29 +292,65 @@ async def scan_label(
     user_profile: str = Form("{}"),
     db: DBSession = Depends(get_db),
 ):
-    """Accept a label image, run OCR, then analysis pipeline."""
+    """Accept a label image, extract ingredients + nutrition via Groq vision,
+    then run the full analysis pipeline."""
     profile = UserProfile(**json.loads(user_profile))
 
-    # Read image bytes
+    # 1. Read image bytes
     img_bytes = await image.read()
+    logger.info("Label image received: %d bytes", len(img_bytes))
 
-    # OCR via pytesseract (fallback)
-    try:
-        from PIL import Image
-        import pytesseract
+    # 2. Extract label sections via Groq vision (OCR + parsing in one call)
+    extraction = extract_label_sections(img_bytes)
+    logger.info(
+        "Label extraction: ingredients=%s nutrition=%s confidence=%.2f missing=%s",
+        extraction.ingredients_text is not None,
+        extraction.nutrition is not None,
+        extraction.overall_confidence,
+        extraction.missing_sections,
+    )
 
-        pil_img = Image.open(io.BytesIO(img_bytes))
-        raw_text: str = pytesseract.image_to_string(pil_img)
-    except ImportError:
-        raise HTTPException(500, "OCR dependencies (pytesseract / Pillow) not installed.")
-    except Exception as exc:
-        raise HTTPException(422, f"OCR failed: {exc}")
+    ingredients_text = extraction.ingredients_text or ""
+    if not ingredients_text.strip():
+        # Fall back to pytesseract OCR if Groq didn't find ingredients
+        try:
+            from PIL import Image as PILImage
+            import pytesseract
 
-    if not raw_text or len(raw_text.strip()) < 5:
+            pil_img = PILImage.open(io.BytesIO(img_bytes))
+            ocr_text: str = pytesseract.image_to_string(pil_img)
+            if ocr_text and len(ocr_text.strip()) >= 5:
+                ingredients_text = ocr_text
+                logger.info("Fell back to pytesseract OCR (%d chars)", len(ocr_text))
+        except Exception as exc:
+            logger.warning("pytesseract fallback failed: %s", exc)
+
+    if not ingredients_text or len(ingredients_text.strip()) < 5:
         raise HTTPException(422, "Could not extract text from image. Try a clearer photo.")
 
+    # 3. Normalize nutrition to per-100g if available
+    nutrition_100g_dict: dict | None = None
+    nutrition_obj: Nutrition | None = None
+    if extraction.nutrition is not None:
+        nutrition_100g_dict, norm_notes = nutrition_to_per_100g(extraction.nutrition)
+        if nutrition_100g_dict is not None:
+            nutrition_obj = Nutrition(**nutrition_100g_dict)
+            if norm_notes:
+                nutrition_obj.uncertainties.extend(norm_notes)
+
+    # 4. Run analysis pipeline (structure → KB → rules → score → summary)
     product = ProductMeta(name="Uploaded Label")
-    result = await _run_analysis_pipeline(raw_text, product, profile, db)
+    result = await _run_analysis_pipeline(
+        ingredients_text, product, profile, db,
+        nutrition=nutrition_obj,
+        nutrition_per_serving=extraction.nutrition,
+    )
+
+    # 5. Attach extraction data to response (backward-compatible additions)
+    result.extraction = extraction
+    result.nutrition_per_serving = extraction.nutrition
+    result.nutrition_100g = nutrition_100g_dict
+
     return result
 
 
@@ -257,14 +365,14 @@ async def chat(req: ChatRequest, db: DBSession = Depends(get_db)):
     evidence = analysis.evidence
 
     try:
-        answer = await gemini_product_chat(
+        answer = await groq_product_chat(
             req.session_id, req.message, req.chat_history, analysis, evidence,
         )
         valid_ids = {e.citation_id for e in evidence}
         detected = {i.name_canonical for i in analysis.ingredients}
         answer = validate_chat_answer(answer, valid_ids, detected)
     except Exception as exc:
-        logger.error("Gemini chat failed: %s", exc)
+        logger.error("Groq chat failed: %s", exc)
         raise HTTPException(502, f"Chat service error: {exc}")
 
     return ChatResponse(

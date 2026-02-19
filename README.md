@@ -37,7 +37,7 @@ Open **http://localhost:5173** in your browser.
 
 - **Barcode scan** → Open Food Facts lookup
 - **Label photo upload** → OCR (pytesseract) fallback
-- **Gemini-powered** ingredient structuring & personalized summaries
+- **Groq-powered** ingredient structuring & personalized summaries
 - **Deterministic rules engine** for allergens, diet conflicts, caffeine, umbrella terms, and avoid-terms
 - **Product-locked chatbot** — only answers about the currently scanned product
 - **Evidence citations** from a curated knowledge base with clickable source links

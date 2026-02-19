@@ -14,6 +14,7 @@ const ResultsPage = ({ data, onReset }) => {
         session_id,
         product,
         product_score,
+        nutrition,
         ingredients,
         umbrella_terms,
         allergen_statements,
@@ -53,26 +54,26 @@ const ResultsPage = ({ data, onReset }) => {
                     </div>
 
                     {/* Score breakdown */}
-                    <div className="mt-6 grid sm:grid-cols-2 gap-4 text-left max-w-xl mx-auto">
-                        {product_score.reasons_good?.length > 0 && (
+                    <div className="mt-6 text-left max-w-xl mx-auto space-y-4">
+                        {product_score.reasons?.length > 0 && (
                             <div>
-                                <h3 className="text-sm font-semibold text-green-400 mb-2">✓ Positives</h3>
+                                <h3 className="text-sm font-semibold text-gray-200 mb-2">Key Factors</h3>
                                 <ul className="space-y-1 text-xs text-gray-300">
-                                    {product_score.reasons_good.slice(0, 4).map((r, i) => (
+                                    {product_score.reasons.slice(0, 5).map((r, i) => (
                                         <li key={i}>• {r}</li>
                                     ))}
                                 </ul>
                             </div>
                         )}
-                        {product_score.reasons_bad?.length > 0 && (
-                            <div>
-                                <h3 className="text-sm font-semibold text-red-400 mb-2">✗ Concerns</h3>
-                                <ul className="space-y-1 text-xs text-gray-300">
-                                    {product_score.reasons_bad.slice(0, 4).map((r, i) => (
-                                        <li key={i}>• {r}</li>
+                        {product_score.penalties?.length > 0 && (
+                            <details className="group">
+                                <summary className="text-sm font-semibold text-red-400 cursor-pointer">✗ Penalty Details ({product_score.penalties.length})</summary>
+                                <ul className="mt-2 space-y-1 text-xs text-gray-400">
+                                    {product_score.penalties.map((p, i) => (
+                                        <li key={i}>• {p}</li>
                                     ))}
                                 </ul>
-                            </div>
+                            </details>
                         )}
                     </div>
 
@@ -97,6 +98,54 @@ const ResultsPage = ({ data, onReset }) => {
                             </ul>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* Nutrition Facts */}
+            {nutrition && (
+                <div className="glass-strong p-6 mb-6 animate-slide-up" style={{ animationDelay: '0.05s' }}>
+                    <h2 className="text-xl font-bold mb-3 text-white flex items-center gap-2">
+                        <span>🥗</span> Nutrition per 100 g
+                    </h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {nutrition.energy_kcal_100g != null && (
+                            <div className="bg-white/5 rounded-lg p-3 text-center">
+                                <div className="text-lg font-bold text-white">{nutrition.energy_kcal_100g}</div>
+                                <div className="text-xs text-gray-400">kcal</div>
+                            </div>
+                        )}
+                        {nutrition.sugars_g_100g != null && (
+                            <div className="bg-white/5 rounded-lg p-3 text-center">
+                                <div className="text-lg font-bold text-white">{nutrition.sugars_g_100g} g</div>
+                                <div className="text-xs text-gray-400">Sugars</div>
+                            </div>
+                        )}
+                        {nutrition.sat_fat_g_100g != null && (
+                            <div className="bg-white/5 rounded-lg p-3 text-center">
+                                <div className="text-lg font-bold text-white">{nutrition.sat_fat_g_100g} g</div>
+                                <div className="text-xs text-gray-400">Sat Fat</div>
+                            </div>
+                        )}
+                        {nutrition.sodium_mg_100g != null && (
+                            <div className="bg-white/5 rounded-lg p-3 text-center">
+                                <div className="text-lg font-bold text-white">{nutrition.sodium_mg_100g} mg</div>
+                                <div className="text-xs text-gray-400">Sodium</div>
+                            </div>
+                        )}
+                        {nutrition.fiber_g_100g != null && (
+                            <div className="bg-white/5 rounded-lg p-3 text-center">
+                                <div className="text-lg font-bold text-white">{nutrition.fiber_g_100g} g</div>
+                                <div className="text-xs text-gray-400">Fiber</div>
+                            </div>
+                        )}
+                        {nutrition.protein_g_100g != null && (
+                            <div className="bg-white/5 rounded-lg p-3 text-center">
+                                <div className="text-lg font-bold text-white">{nutrition.protein_g_100g} g</div>
+                                <div className="text-xs text-gray-400">Protein</div>
+                            </div>
+                        )}
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-2 text-right">Source: {nutrition.source || 'OpenFoodFacts'}</p>
                 </div>
             )}
 

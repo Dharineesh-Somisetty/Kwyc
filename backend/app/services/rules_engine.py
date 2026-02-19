@@ -1,4 +1,4 @@
-"""Deterministic rules engine – flags are NEVER delegated to Gemini."""
+"""Deterministic rules engine ."""
 
 from __future__ import annotations
 from typing import List, Dict

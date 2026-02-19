@@ -1,4 +1,4 @@
-"""LabelLens – Pydantic schemas (API + Gemini structured output contracts)."""
+"""LabelLens – Pydantic schemas (API + LLM structured output contracts)."""
 
 from __future__ import annotations
 from pydantic import BaseModel, Field
@@ -26,7 +26,7 @@ class EvidenceSnippet(BaseModel):
     source_url: str
 
 # ──────────────────────────────────────────────
-# Ingredient item (from Gemini structuring)
+# Ingredient item (from LLM structuring)
 # ──────────────────────────────────────────────
 class IngredientItem(BaseModel):
     name_raw: str
@@ -46,15 +46,67 @@ class Flag(BaseModel):
     citation_ids: List[str] = Field(default_factory=list)
 
 # ──────────────────────────────────────────────
+# Nutrition (from OpenFoodFacts / label)
+# ──────────────────────────────────────────────
+class Nutrition(BaseModel):
+    energy_kcal_100g: Optional[float] = None
+    sugars_g_100g: Optional[float] = None
+    sat_fat_g_100g: Optional[float] = None
+    sodium_mg_100g: Optional[float] = None
+    fiber_g_100g: Optional[float] = None
+    protein_g_100g: Optional[float] = None
+    source: str = "openfoodfacts"
+    uncertainties: List[str] = Field(default_factory=list)
+
+# ──────────────────────────────────────────────
+# Nutrition Facts (extracted from label photo)
+# ──────────────────────────────────────────────
+class NutritionFacts(BaseModel):
+    serving_size_text: Optional[str] = None
+    serving_size_value: Optional[float] = None
+    serving_size_unit: Optional[str] = None        # g, ml, oz, etc.
+    servings_per_container: Optional[float] = None
+
+    calories: Optional[float] = None
+    total_fat_g: Optional[float] = None
+    saturated_fat_g: Optional[float] = None
+    trans_fat_g: Optional[float] = None
+    cholesterol_mg: Optional[float] = None
+    sodium_mg: Optional[float] = None
+    total_carbs_g: Optional[float] = None
+    fiber_g: Optional[float] = None
+    total_sugars_g: Optional[float] = None
+    added_sugars_g: Optional[float] = None
+    protein_g: Optional[float] = None
+
+    is_per_serving: bool = True
+    notes: List[str] = Field(default_factory=list)
+    confidence: float = 0.0
+
+class LabelExtraction(BaseModel):
+    ingredients_text: Optional[str] = None
+    ingredients_confidence: float = 0.0
+
+    nutrition: Optional[NutritionFacts] = None
+    nutrition_confidence: float = 0.0
+
+    missing_sections: List[str] = Field(default_factory=list)
+    overall_confidence: float = 0.0
+
+# ──────────────────────────────────────────────
 # Product score (from scorer.py)
 # ──────────────────────────────────────────────
 class ProductScore(BaseModel):
-    score: float = 50.0
+    score: int = 50
     grade: str = "C"
-    reasons_good: List[str] = Field(default_factory=list)
-    reasons_bad: List[str] = Field(default_factory=list)
+    reasons: List[str] = Field(default_factory=list)
+    penalties: List[str] = Field(default_factory=list)
     uncertainties: List[str] = Field(default_factory=list)
     personalized_conflicts: List[str] = Field(default_factory=list)
+    nutrition_used: bool = False
+    nutrition_confidence: str = "low"
+    beverage_label: bool = False
+    beverage_reason: str = ""
 
 # ──────────────────────────────────────────────
 # Full analysis result returned to frontend
@@ -74,12 +126,17 @@ class AnalysisResult(BaseModel):
     allergen_statements: List[str] = Field(default_factory=list)
     flags: List[Flag] = Field(default_factory=list)
     evidence: List[EvidenceSnippet] = Field(default_factory=list)
+    nutrition: Optional[Nutrition] = None
     product_score: Optional[ProductScore] = None
     personalized_summary: str = ""
     disclaimer: str = "Educational only; not medical advice."
+    # Label extraction additions (backward-compatible)
+    extraction: Optional[LabelExtraction] = None
+    nutrition_per_serving: Optional[NutritionFacts] = None
+    nutrition_100g: Optional[dict] = None
 
 # ──────────────────────────────────────────────
-# Gemini structured output models
+# LLM structured output models
 # ──────────────────────────────────────────────
 class StructuredIngredientsResult(BaseModel):
     ingredients: List[IngredientItem]

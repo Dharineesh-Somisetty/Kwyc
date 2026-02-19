@@ -1,4 +1,4 @@
-"""Validators for Gemini outputs – enforce schema compliance, citation integrity, and safety."""
+"""Validators for LLM outputs – enforce schema compliance, citation integrity, and safety."""
 
 from __future__ import annotations
 import re, logging
@@ -50,7 +50,7 @@ def validate_personalized_summary(
     valid_citation_ids: Set[str],
     detected_ingredient_names: Set[str],
 ) -> PersonalizedSummaryResult:
-    """Validate Gemini summary: citations must exist, no fabricated ingredients, no medical claims."""
+    """Validate LLM summary: citations must exist, no fabricated ingredients, no medical claims."""
     # 1. Filter citations_used to only valid IDs
     result.citations_used = [
         cid for cid in result.citations_used if cid in valid_citation_ids

@@ -1,6 +1,6 @@
 # LabelLens Backend
 
-FastAPI backend powering LabelLens — ingredient analysis with Gemini AI.
+FastAPI backend powering LabelLens — ingredient analysis with Groq AI.
 
 ## Quick Start
 
@@ -15,7 +15,7 @@ pip install -r requirements.txt
 
 # Configure environment
 cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
+# Edit .env and add your GROQ_API_KEY
 
 # Run server
 uvicorn app.main:app --reload --port 8000
@@ -68,7 +68,7 @@ curl -X POST http://127.0.0.1:8000/api/chat \
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GEMINI_API_KEY` | Yes | Google Gemini API key |
+| `GROQ_API_KEY` | Yes | Groq API key |
 | `DATABASE_URL` | No | SQLite URL (default: `sqlite:///./labellens.db`) |
 | `ALLOWED_ORIGINS` | No | Comma-separated CORS origins |
 | `RATE_LIMIT_PER_MINUTE` | No | Requests per IP per minute (default: 30) |
@@ -82,8 +82,8 @@ python -m tests.test_rules_validators
 
 ## Architecture
 
-- **Gemini** structures ingredients and generates summaries/chat (never decides flags)
+- **Groq** structures ingredients and generates summaries/chat (never decides flags)
 - **Rules engine** produces deterministic flags (allergens, diet, caffeine, umbrella terms, avoid terms)
-- **Validators** ensure Gemini output is schema-compliant, citation-valid, and medically safe
+- **Validators** ensure LLM output is schema-compliant, citation-valid, and medically safe
 - **KB** (`kb/ingredients_kb.json`) provides evidence snippets with real citations
 - **SQLite** stores sessions for chat continuity

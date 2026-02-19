@@ -8,7 +8,8 @@
     ],
     "tags": [
       "sweetener",
-      "artificial-sweetener"
+      "artificial-sweetener",
+      "upf_indicator_sweetener"
     ],
     "description": "A high-intensity sweetener used in some sugar-free products.",
     "considerations": [
@@ -36,6 +37,28 @@
       {
         "title": "FDA Food Additive Status List",
         "url": "https://www.fda.gov/food/food-additives-petitions/food-additive-status-list"
+      }
+    ]
+  },
+  {
+    "canonicalName": "acetylated distarch adipate",
+    "synonyms": [
+      "E1422",
+      "modified maize starch (E1422)"
+    ],
+    "tags": [
+      "starch",
+      "additive",
+      "upf_indicator_modified_starch"
+    ],
+    "description": "A chemically cross-linked and acetylated starch used as a stabilizer. Common UPF indicator.",
+    "considerations": [
+      "UPF processing indicator (modified starch variant)."
+    ],
+    "citations": [
+      {
+        "title": "EFSA Modified Starches Panel",
+        "url": "https://www.efsa.europa.eu/en/efsajournal/pub/4911"
       }
     ]
   },
@@ -356,7 +379,8 @@
     "tags": [
       "umbrella-term",
       "flavoring",
-      "artificial"
+      "artificial",
+      "upf_indicator_flavor"
     ],
     "description": "Synthetic flavor compounds created in a laboratory.",
     "considerations": [
@@ -412,7 +436,8 @@
       "equal"
     ],
     "tags": [
-      "artificial-sweetener"
+      "artificial-sweetener",
+      "upf_indicator_sweetener"
     ],
     "description": "An artificial sweetener approximately 200 times sweeter than sugar. FDA-approved but debated.",
     "considerations": [
@@ -770,7 +795,8 @@
     ],
     "tags": [
       "artificial-color",
-      "additive"
+      "additive",
+      "upf_indicator_color"
     ],
     "description": "A synthetic blue dye derived from petroleum.",
     "considerations": [
@@ -1126,7 +1152,8 @@
     ],
     "tags": [
       "preservative",
-      "additive"
+      "additive",
+      "upf_indicator_preservative"
     ],
     "description": "A preservative commonly used in bread products.",
     "considerations": [],
@@ -1246,7 +1273,8 @@
     ],
     "tags": [
       "color",
-      "additive"
+      "additive",
+      "upf_indicator_color"
     ],
     "description": "A color additive used to color foods and beverages.",
     "considerations": [],
@@ -3211,6 +3239,28 @@
     ]
   },
   {
+    "canonicalName": "hydroxypropyl distarch phosphate",
+    "synonyms": [
+      "E1442",
+      "modified starch (E1442)"
+    ],
+    "tags": [
+      "starch",
+      "additive",
+      "upf_indicator_modified_starch"
+    ],
+    "description": "A cross-linked hydroxypropylated starch used for freeze-thaw stability. Common UPF indicator.",
+    "considerations": [
+      "UPF processing indicator (modified starch variant)."
+    ],
+    "citations": [
+      {
+        "title": "EFSA Modified Starches Panel",
+        "url": "https://www.efsa.europa.eu/en/efsajournal/pub/4911"
+      }
+    ]
+  },
+  {
     "canonicalName": "hydroxypropyl methylcellulose",
     "synonyms": [],
     "tags": [
@@ -3489,7 +3539,8 @@
     ],
     "tags": [
       "emulsifier",
-      "additive"
+      "additive",
+      "upf_indicator_emulsifier"
     ],
     "description": "An emulsifier used to help ingredients mix.",
     "considerations": [
@@ -3751,7 +3802,8 @@
     "tags": [
       "carbohydrate",
       "filler",
-      "processed"
+      "processed",
+      "upf_indicator_maltodextrin"
     ],
     "description": "A highly processed starch-derived carbohydrate used as a thickener or filler.",
     "considerations": [
@@ -3978,12 +4030,17 @@
   {
     "canonicalName": "modified food starch",
     "synonyms": [
-      "modified starch"
+      "modified starch",
+      "modified corn starch",
+      "modified maize starch",
+      "modified tapioca starch",
+      "modified potato starch"
     ],
     "tags": [
       "starch",
       "additive",
-      "umbrella-term"
+      "umbrella-term",
+      "upf_indicator_modified_starch"
     ],
     "description": "Processed starch used to improve texture and stability.",
     "considerations": [
@@ -4027,7 +4084,8 @@
     "tags": [
       "emulsifier",
       "additive",
-      "umbrella-term"
+      "umbrella-term",
+      "upf_indicator_emulsifier"
     ],
     "description": "Emulsifiers derived from fats/oils; the source may be plant or animal.",
     "considerations": [
@@ -4150,7 +4208,8 @@
     ],
     "tags": [
       "umbrella-term",
-      "flavoring"
+      "flavoring",
+      "upf_indicator_flavor"
     ],
     "description": "A broad term covering flavor compounds derived from plant or animal sources. Exact composition is proprietary.",
     "considerations": [
@@ -4915,7 +4974,8 @@
     ],
     "tags": [
       "emulsifier",
-      "additive"
+      "additive",
+      "upf_indicator_emulsifier"
     ],
     "description": "An emulsifier used to improve texture and stability.",
     "considerations": [],
@@ -5028,7 +5088,8 @@
     ],
     "tags": [
       "preservative",
-      "additive"
+      "additive",
+      "upf_indicator_preservative"
     ],
     "description": "A preservative used to inhibit molds and yeasts.",
     "considerations": [],
@@ -5066,6 +5127,29 @@
       {
         "title": "FDA Food Labeling Guide",
         "url": "https://www.fda.gov/food/food-labeling-nutrition/food-labeling-guide"
+      }
+    ]
+  },
+  {
+    "canonicalName": "pregelatinized starch",
+    "synonyms": [
+      "pre-gelatinized starch",
+      "pregelatinised starch",
+      "E1404"
+    ],
+    "tags": [
+      "starch",
+      "additive",
+      "upf_indicator_modified_starch"
+    ],
+    "description": "A physically modified starch pre-cooked for instant thickening. Classified as a UPF processing marker (NOVA group 4).",
+    "considerations": [
+      "UPF processing indicator (modified starch variant)."
+    ],
+    "citations": [
+      {
+        "title": "Codex Alimentarius: Modified Starches",
+        "url": "https://www.fao.org/gsfaonline/additives/details.html?id=367"
       }
     ]
   },
@@ -5233,7 +5317,8 @@
     ],
     "tags": [
       "artificial-color",
-      "additive"
+      "additive",
+      "upf_indicator_color"
     ],
     "description": "A synthetic red dye widely used in the US. Banned or requires warning labels in some countries.",
     "considerations": [
@@ -5876,7 +5961,8 @@
     ],
     "tags": [
       "preservative",
-      "additive"
+      "additive",
+      "upf_indicator_preservative"
     ],
     "description": "A widely used preservative in acidic foods and beverages.",
     "considerations": [
@@ -6018,7 +6104,8 @@
     ],
     "tags": [
       "preservative",
-      "additive"
+      "additive",
+      "upf_indicator_preservative"
     ],
     "description": "A curing agent/preservative used in some processed meats.",
     "considerations": [],
@@ -6040,7 +6127,8 @@
     ],
     "tags": [
       "preservative",
-      "additive"
+      "additive",
+      "upf_indicator_preservative"
     ],
     "description": "Preservatives commonly used in cured meats. Can form nitrosamines during cooking.",
     "considerations": [
@@ -6205,7 +6293,8 @@
     "tags": [
       "emulsifier",
       "soy",
-      "allergen-soy"
+      "allergen-soy",
+      "upf_indicator_emulsifier"
     ],
     "description": "An emulsifier extracted from soybeans. Very commonly used in chocolate and baked goods.",
     "considerations": [
@@ -6423,6 +6512,53 @@
     ]
   },
   {
+    "canonicalName": "starch acetate",
+    "synonyms": [
+      "acetylated starch",
+      "E1420",
+      "starch ester"
+    ],
+    "tags": [
+      "starch",
+      "additive",
+      "upf_indicator_modified_starch"
+    ],
+    "description": "An acetylated starch used as a thickener and stabilizer. Classified as a UPF processing marker.",
+    "considerations": [
+      "UPF processing indicator (modified starch variant)."
+    ],
+    "citations": [
+      {
+        "title": "EFSA Modified Starches Panel",
+        "url": "https://www.efsa.europa.eu/en/efsajournal/pub/4911"
+      }
+    ]
+  },
+  {
+    "canonicalName": "starch sodium octenyl succinate",
+    "synonyms": [
+      "E1450",
+      "OSA starch",
+      "octenylsuccinic starch"
+    ],
+    "tags": [
+      "starch",
+      "additive",
+      "emulsifier",
+      "upf_indicator_modified_starch"
+    ],
+    "description": "A chemically modified starch used as an emulsifier and encapsulant. Common UPF indicator.",
+    "considerations": [
+      "UPF processing indicator (modified starch variant)."
+    ],
+    "citations": [
+      {
+        "title": "EFSA Modified Starches Panel",
+        "url": "https://www.efsa.europa.eu/en/efsajournal/pub/4911"
+      }
+    ]
+  },
+  {
     "canonicalName": "stevia",
     "synonyms": [
       "steviol glycosides",
@@ -6468,7 +6604,8 @@
     ],
     "tags": [
       "sweetener",
-      "artificial-sweetener"
+      "artificial-sweetener",
+      "upf_indicator_sweetener"
     ],
     "description": "A high-intensity sweetener used in sugar-free foods and drinks.",
     "considerations": [
@@ -6532,7 +6669,8 @@
     "synonyms": [],
     "tags": [
       "emulsifier",
-      "additive"
+      "additive",
+      "upf_indicator_emulsifier"
     ],
     "description": "A sunflower-derived lecithin used as an emulsifier.",
     "considerations": [],
@@ -7484,7 +7622,8 @@
     ],
     "tags": [
       "artificial-color",
-      "additive"
+      "additive",
+      "upf_indicator_color"
     ],
     "description": "A synthetic yellow dye. Requires warning label in EU due to hyperactivity concerns.",
     "considerations": [
@@ -7503,7 +7642,8 @@
     "synonyms": [],
     "tags": [
       "additive",
-      "color"
+      "color",
+      "upf_indicator_color"
     ],
     "description": "A food additive used for a functional purpose such as preservation, texture, stability, or flavor.",
     "considerations": [

@@ -214,7 +214,7 @@ const ScanPage = ({ onScanResult, isLoading }) => {
             {/* Feature cards */}
             <div className="grid sm:grid-cols-3 gap-4 mt-16">
                 {[
-                    { icon: '🔬', title: 'AI Analysis', desc: 'Gemini-powered ingredient parsing & evidence lookup' },
+                    { icon: '🔬', title: 'AI Analysis', desc: 'Groq-powered ingredient parsing & evidence lookup' },
                     { icon: '🛡️', title: 'Conflict Detection', desc: 'Allergy, diet & caffeine flags tailored to you' },
                     { icon: '💬', title: 'Product Chat', desc: 'Ask follow-up questions about any ingredient' },
                 ].map((f, i) => (
