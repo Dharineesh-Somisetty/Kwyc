@@ -24,11 +24,14 @@ export const scanBarcode = async (barcode, userProfile = {}) => {
 
 /**
  * Upload a label image → full analysis result.
+ * @param {string} [barcode] - Optional barcode to associate with this label
+ *   so the backend can cache the extraction for future barcode-only scans.
  */
-export const scanLabel = async (imageFile, userProfile = {}) => {
+export const scanLabel = async (imageFile, userProfile = {}, barcode = '') => {
     const form = new FormData();
     form.append('image', imageFile);
     form.append('user_profile', JSON.stringify(userProfile));
+    if (barcode) form.append('barcode', barcode);
     const res = await api.post('/api/scan/label', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
     });

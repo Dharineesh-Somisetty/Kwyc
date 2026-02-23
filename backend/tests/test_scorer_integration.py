@@ -24,7 +24,7 @@ class TestScoreContract:
 
     def test_empty_everything_returns_default(self):
         result = calculate_product_score([])
-        assert result["score"] == 50
+        assert result["score"] == 56  # round(0.7*50 + 0.3*70)
         assert result["grade"] == "C"
 
 

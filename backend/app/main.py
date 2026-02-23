@@ -31,6 +31,7 @@ from .schemas import (
     BarcodeScanRequest, ChatRequest, ChatResponse,
     AnalysisResult, ProductMeta, UserProfile, EvidenceSnippet,
     ProductScore, Nutrition, NutritionFacts, LabelExtraction,
+    PortionInfo, NutritionScoreInfo,
 )
 from .services.off_service import fetch_product_from_off
 from .services.groq_service import (
@@ -47,6 +48,13 @@ from .services.validators import (
     validate_chat_answer,
 )
 from .services.scorer import calculate_product_score
+from .services.cache_service import (
+    get_cached_by_barcode,
+    upsert_cache_for_barcode,
+    cache_has_usable_nutrition,
+    SCORING_VERSION,
+    SCHEMA_VERSION,
+)
 
 # ── Create tables ────────────────────────────────────────────────
 models.Base.metadata.create_all(bind=engine)
@@ -210,6 +218,7 @@ async def _run_analysis_pipeline(
         flags=flags,
         evidence=evidence,
         nutrition=nutrition,
+        nutrition_per_serving=nutrition_per_serving,
     )
 
     # 5. Product score
@@ -255,34 +264,120 @@ async def _run_analysis_pipeline(
 @app.post("/api/scan/barcode", response_model=AnalysisResult)
 async def scan_barcode(req: BarcodeScanRequest, db: DBSession = Depends(get_db)):
     off = fetch_product_from_off(req.barcode)
+
+    # ── Path A: OFF has product with ingredients ──────────────────
+    if off and off.get("ingredients_text"):
+        ingredients_text = off["ingredients_text"]
+        product = ProductMeta(
+            name=off.get("product_name"),
+            brand=off.get("brand"),
+            image_url=off.get("image_url"),
+            barcode=req.barcode,
+        )
+
+        # Build Nutrition model from OFF nutriments (may be None)
+        nutrition_obj: Optional[Nutrition] = None
+        raw_nut = off.get("nutriments")
+        has_off_nutrition = raw_nut is not None
+        if has_off_nutrition:
+            nutrition_obj = Nutrition(**raw_nut)
+
+        categories = off.get("categories") or []
+
+        # If OFF has no nutrition, check cache for OCR-extracted data
+        cached_nutrition_per_serving = None
+        nutrition_source = "not_detected"
+        if has_off_nutrition:
+            nutrition_source = "openfoodfacts"
+        else:
+            cached = get_cached_by_barcode(db, req.barcode)
+            if cached and cache_has_usable_nutrition(cached):
+                # Reuse cached per-100g nutrition
+                nut_100g = cached.get("nutrition_100g") or {}
+                if nut_100g and isinstance(nut_100g, dict) and any(
+                    nut_100g.get(k) is not None
+                    for k in ("energy_kcal_100g", "sugars_g_100g", "sat_fat_g_100g",
+                              "sodium_mg_100g", "fiber_g_100g", "protein_g_100g")
+                ):
+                    nut_100g.setdefault("source", "cache")
+                    nut_100g.setdefault("uncertainties", [])
+                    nutrition_obj = Nutrition(**nut_100g)
+                    nutrition_source = "cache"
+                # Also pass through cached per-serving
+                nut_ps = cached.get("nutrition_per_serving") or {}
+                if nut_ps and isinstance(nut_ps, dict):
+                    try:
+                        cached_nutrition_per_serving = NutritionFacts(**nut_ps)
+                    except Exception:
+                        pass
+                logger.info("Using cached nutrition for barcode=%s", req.barcode)
+
+        result = await _run_analysis_pipeline(
+            ingredients_text, product, req.user_profile, db,
+            nutrition=nutrition_obj,
+            product_categories=categories,
+            nutrition_per_serving=cached_nutrition_per_serving,
+        )
+
+        # Tag nutrition provenance on the result (backward-compatible)
+        if has_off_nutrition:
+            result.nutrition_status = "verified_barcode"
+            result.nutrition_source = "openfoodfacts"
+        elif nutrition_source == "cache":
+            result.nutrition_status = "extracted_photo"
+            result.nutrition_source = "cache"
+        else:
+            result.nutrition_status = "not_detected"
+            result.nutrition_source = None
+
+        return result
+
+    # ── Path B: OFF has no product or no ingredients — try cache ──
+    cached = get_cached_by_barcode(db, req.barcode)
+    if cached and cached.get("ingredients_text", "").strip():
+        product = ProductMeta(
+            name=cached.get("product_name") or (off or {}).get("product_name") or "Cached Product",
+            brand=cached.get("brand") or (off or {}).get("brand") or "",
+            image_url=(off or {}).get("image_url") or "",
+            barcode=req.barcode,
+        )
+
+        nutrition_obj = None
+        cached_nutrition_per_serving = None
+        has_usable = cache_has_usable_nutrition(cached)
+
+        if has_usable:
+            nut_100g = cached.get("nutrition_100g") or {}
+            if nut_100g and isinstance(nut_100g, dict) and any(
+                nut_100g.get(k) is not None
+                for k in ("energy_kcal_100g", "sugars_g_100g", "sat_fat_g_100g",
+                          "sodium_mg_100g", "fiber_g_100g", "protein_g_100g")
+            ):
+                nut_100g.setdefault("source", "cache")
+                nut_100g.setdefault("uncertainties", [])
+                nutrition_obj = Nutrition(**nut_100g)
+
+            nut_ps = cached.get("nutrition_per_serving") or {}
+            if nut_ps and isinstance(nut_ps, dict):
+                try:
+                    cached_nutrition_per_serving = NutritionFacts(**nut_ps)
+                except Exception:
+                    pass
+
+        result = await _run_analysis_pipeline(
+            cached["ingredients_text"], product, req.user_profile, db,
+            nutrition=nutrition_obj,
+            nutrition_per_serving=cached_nutrition_per_serving,
+        )
+
+        result.nutrition_status = "extracted_photo" if has_usable else "not_detected"
+        result.nutrition_source = "cache" if has_usable else None
+        return result
+
+    # ── Path C: Nothing available ────────────────────────────────
     if not off:
-        raise HTTPException(404, "Product not found on Open Food Facts.")
-
-    ingredients_text = off.get("ingredients_text", "")
-    if not ingredients_text:
-        raise HTTPException(422, "Product found but no ingredients listed.")
-
-    product = ProductMeta(
-        name=off.get("product_name"),
-        brand=off.get("brand"),
-        image_url=off.get("image_url"),
-        barcode=req.barcode,
-    )
-
-    # Build Nutrition model from OFF nutriments (may be None)
-    nutrition_obj: Optional[Nutrition] = None
-    raw_nut = off.get("nutriments")
-    if raw_nut:
-        nutrition_obj = Nutrition(**raw_nut)
-
-    categories = off.get("categories") or []
-
-    result = await _run_analysis_pipeline(
-        ingredients_text, product, req.user_profile, db,
-        nutrition=nutrition_obj,
-        product_categories=categories,
-    )
-    return result
+        raise HTTPException(404, "Product not found. Try uploading a label photo.")
+    raise HTTPException(422, "Product found but no ingredients listed. Try uploading a label photo.")
 
 
 # ── POST /api/scan/label ────────────────────────────────────────
@@ -290,6 +385,7 @@ async def scan_barcode(req: BarcodeScanRequest, db: DBSession = Depends(get_db))
 async def scan_label(
     image: UploadFile = File(...),
     user_profile: str = Form("{}"),
+    barcode: str = Form(""),
     db: DBSession = Depends(get_db),
 ):
     """Accept a label image, extract ingredients + nutrition via Groq vision,
@@ -326,7 +422,13 @@ async def scan_label(
             logger.warning("pytesseract fallback failed: %s", exc)
 
     if not ingredients_text or len(ingredients_text.strip()) < 5:
-        raise HTTPException(422, "Could not extract text from image. Try a clearer photo.")
+        # If we have nutrition data from the label, proceed without ingredients
+        # The scorer can infer ingredients from product name/category
+        if extraction.nutrition is not None:
+            logger.info("No ingredients text but nutrition present; proceeding with inference")
+            ingredients_text = ""
+        else:
+            raise HTTPException(422, "Could not extract text from image. Try a clearer photo.")
 
     # 3. Normalize nutrition to per-100g if available
     nutrition_100g_dict: dict | None = None
@@ -339,7 +441,7 @@ async def scan_label(
                 nutrition_obj.uncertainties.extend(norm_notes)
 
     # 4. Run analysis pipeline (structure → KB → rules → score → summary)
-    product = ProductMeta(name="Uploaded Label")
+    product = ProductMeta(name="Uploaded Label", barcode=barcode or None)
     result = await _run_analysis_pipeline(
         ingredients_text, product, profile, db,
         nutrition=nutrition_obj,
@@ -350,6 +452,29 @@ async def scan_label(
     result.extraction = extraction
     result.nutrition_per_serving = extraction.nutrition
     result.nutrition_100g = nutrition_100g_dict
+
+    # 6. Cache extraction under barcode for future barcode-only scans
+    barcode = (barcode or "").strip()
+    if barcode and (ingredients_text.strip() or extraction.nutrition is not None):
+        try:
+            score_dict = result.product_score.model_dump() if result.product_score else {}
+            nut_ps_dict = extraction.nutrition.model_dump() if extraction.nutrition else {}
+            upsert_cache_for_barcode(db, barcode, {
+                "product_name": product.name or "",
+                "brand": product.brand or "",
+                "source": "label_photo",
+                "ingredients_text": ingredients_text,
+                "ingredients": [i.model_dump() for i in result.ingredients] if result.ingredients else [],
+                "nutrition_per_serving": nut_ps_dict,
+                "nutrition_100g": nutrition_100g_dict,
+                "product_score": score_dict,
+                "nutrition_confidence": result.product_score.nutrition_confidence if result.product_score else "low",
+                "extraction_confidence": extraction.overall_confidence,
+                "schema_version": SCHEMA_VERSION,
+                "scoring_version": SCORING_VERSION,
+            })
+        except Exception as exc:
+            logger.warning("Failed to cache label extraction for barcode=%s: %s", barcode, exc)
 
     return result
 

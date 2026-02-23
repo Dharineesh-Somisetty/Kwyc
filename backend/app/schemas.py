@@ -94,6 +94,44 @@ class LabelExtraction(BaseModel):
     overall_confidence: float = 0.0
 
 # ──────────────────────────────────────────────
+# Portion-sensitive info
+# ──────────────────────────────────────────────
+class PortionInfo(BaseModel):
+    portion_sensitive: bool = False
+    typical_serving_text: Optional[str] = None   # e.g. "1 Tbsp (21g)"
+    note: Optional[str] = None                   # e.g. "Typically consumed in small amounts."
+
+# ──────────────────────────────────────────────
+# Nutrition score / processing / final score (split outputs v2)
+# ──────────────────────────────────────────────
+class NutritionScoreInfo(BaseModel):
+    score: int = 50
+    grade: str = "C"
+    reasons: List[str] = Field(default_factory=list)
+    penalties: List[str] = Field(default_factory=list)
+    uncertainties: List[str] = Field(default_factory=list)
+    nutrition_used: bool = False
+    nutrition_confidence: str = "low"  # high | medium | low
+    basis: str = "100g"                # "100g" or "serving"
+
+class ProcessingInfo(BaseModel):
+    level: str = "processed"   # minimally_processed | processed | upf_signals
+    processing_score: int = 70
+    signals: List[str] = Field(default_factory=list)
+    details: List[str] = Field(default_factory=list)
+
+class FinalScoreInfo(BaseModel):
+    score: int = 50
+    grade: str = "C"
+    reasons: List[str] = Field(default_factory=list)
+    uncertainties: List[str] = Field(default_factory=list)
+
+# Backward compat alias
+class ProcessingBadge(BaseModel):
+    level: str = "processed"
+    signals: List[str] = Field(default_factory=list)
+
+# ──────────────────────────────────────────────
 # Product score (from scorer.py)
 # ──────────────────────────────────────────────
 class ProductScore(BaseModel):
@@ -107,6 +145,18 @@ class ProductScore(BaseModel):
     nutrition_confidence: str = "low"
     beverage_label: bool = False
     beverage_reason: str = ""
+    # Split outputs (v2)
+    nutrition_score: Optional[NutritionScoreInfo] = None
+    processing: Optional[ProcessingInfo] = None
+    processing_badge: Optional[ProcessingBadge] = None   # backward compat
+    final_score: Optional[FinalScoreInfo] = None
+    category: Optional[str] = None
+    ingredients_inferred: bool = False
+    # Portion-sensitive scoring (v3)
+    nutrition_score_100g: Optional[NutritionScoreInfo] = None
+    nutrition_score_serving: Optional[NutritionScoreInfo] = None
+    primary_nutrition_view: str = "100g"   # "100g" or "serving"
+    portion_info: Optional[PortionInfo] = None
 
 # ──────────────────────────────────────────────
 # Full analysis result returned to frontend
@@ -134,6 +184,9 @@ class AnalysisResult(BaseModel):
     extraction: Optional[LabelExtraction] = None
     nutrition_per_serving: Optional[NutritionFacts] = None
     nutrition_100g: Optional[dict] = None
+    # Nutrition provenance (set by barcode endpoint)
+    nutrition_status: Optional[str] = None    # verified_barcode|extracted_photo|not_detected
+    nutrition_source: Optional[str] = None    # openfoodfacts|cache|None
 
 # ──────────────────────────────────────────────
 # LLM structured output models

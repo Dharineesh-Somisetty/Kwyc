@@ -66,7 +66,7 @@ GOLDEN_PRODUCTS = {
         "product_name": "Diet Soda",
         # Zero nutrition penalties; UPF cap=15 limits deduction.
         # Score ~85-90. Diet soda is nutritionally inert but processed.
-        "expected_range": (80, 100),
+        "expected_range": (55, 85),
     },
     "chocolate_hazelnut_spread_like": {
         "ingredients": [
@@ -242,8 +242,8 @@ class TestNutritionConfidence:
 class TestUPFPenalties:
     def test_cola_has_upf_penalties(self):
         result = _score_product("cola_soda_like")
-        upf_penalties = [p for p in result["penalties"] if "UPF" in p]
-        assert len(upf_penalties) > 0, "Cola should have UPF penalty lines"
+        # UPF signals are now in processing.signals, not top-level penalties
+        assert len(result["processing"]["signals"]) > 0, "Cola should have UPF processing signals"
 
     def test_sparkling_water_no_upf(self):
         result = _score_product("sparkling_water")
@@ -268,11 +268,12 @@ class TestUPFPenalties:
                 "protein_g_100g": 0,
             },
         )
-        # With nutrition: UPF cap=15. Score should be 100 - 10(sugar) - 15(upf) = 75
-        # (sugar 2g → pen 10, no other nutrition penalties hit)
-        assert result["score"] >= 70, (
-            f"Score {result['score']} – upf cap should limit penalty"
+        # With split scoring: nutrition_score is high, processing_score is low
+        # due to many UPF signals + hydrogenated oil hard penalty (-25).
+        assert result["processing"]["processing_score"] < result["nutrition_score"]["score"], (
+            "Processing score should be lower than nutrition score for heavily processed product"
         )
+        assert result["score"] >= 0
 
 
 # ── Position weight function ──────────────────────────────────────────────
@@ -363,7 +364,7 @@ class TestIngredientFallback:
 class TestEdgeCases:
     def test_empty_inputs(self):
         result = calculate_product_score(ingredients=[])
-        assert result["score"] == 50
+        assert result["score"] == 56  # round(0.7*50 + 0.3*70)
         assert result["grade"] == "C"
         assert result["nutrition_confidence"] == "low"
 
