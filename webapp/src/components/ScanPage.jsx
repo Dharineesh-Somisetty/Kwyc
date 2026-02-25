@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import Scanner from './Scanner';
+import ProfileSelector from './ProfileSelector';
 
 const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '' }) => {
     const [barcode, setBarcode] = useState('');
@@ -8,41 +9,38 @@ const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '' }) => {
     const [selectedImage, setSelectedImage] = useState(null);
     const [previewUrl, setPreviewUrl] = useState(null);
 
-    // ── User profile state ─────────────────────
-    const [showProfile, setShowProfile] = useState(false);
-    const [profile, setProfile] = useState({
-        vegan: false,
-        vegetarian: false,
-        halal: false,
-        allergies: '',
-        caffeine_limit_mg: '',
-        avoid_terms: '',
-    });
+    // ── Selected household profile ─────────────
+    const [selectedProfileId, setSelectedProfileId] = useState(null);
+    const [selectedProfileName, setSelectedProfileName] = useState('');
 
-    const buildProfilePayload = () => ({
-        vegan: profile.vegan,
-        vegetarian: profile.vegetarian,
-        halal: profile.halal,
-        allergies: profile.allergies
-            ? profile.allergies.split(',').map(s => s.trim()).filter(Boolean)
-            : [],
-        caffeine_limit_mg: profile.caffeine_limit_mg ? Number(profile.caffeine_limit_mg) : null,
-        avoid_terms: profile.avoid_terms
-            ? profile.avoid_terms.split(',').map(s => s.trim()).filter(Boolean)
-            : [],
-    });
+    const handleProfileSelect = (id, name) => {
+        setSelectedProfileId(id);
+        if (name) setSelectedProfileName(name);
+    };
 
     // ── Barcode submit ─────────────────────────
     const handleBarcodeSubmit = (e) => {
         e?.preventDefault();
         if (!barcode.trim()) return;
-        onScanResult({ type: 'barcode', barcode: barcode.trim(), userProfile: buildProfilePayload() });
+        onScanResult({
+            type: 'barcode',
+            barcode: barcode.trim(),
+            userProfile: {},
+            profileId: selectedProfileId,
+            profileName: selectedProfileName,
+        });
     };
 
     const handleScanSuccess = (decodedText) => {
         setBarcode(decodedText);
         setIsCameraMode(false);
-        onScanResult({ type: 'barcode', barcode: decodedText, userProfile: buildProfilePayload() });
+        onScanResult({
+            type: 'barcode',
+            barcode: decodedText,
+            userProfile: {},
+            profileId: selectedProfileId,
+            profileName: selectedProfileName,
+        });
     };
 
     // ── Image upload ───────────────────────────
@@ -64,8 +62,10 @@ const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '' }) => {
         onScanResult({
             type: 'label',
             imageFile: selectedImage,
-            barcode: lastFailedBarcode,   // forward barcode so backend can cache
-            userProfile: buildProfilePayload(),
+            barcode: lastFailedBarcode,
+            userProfile: {},
+            profileId: selectedProfileId,
+            profileName: selectedProfileName,
         });
     };
 
@@ -74,19 +74,6 @@ const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '' }) => {
         setSelectedImage(null);
         setPreviewUrl(null);
     };
-
-    // ── Toggle helper ──────────────────────────
-    const Toggle = ({ label, checked, onChange }) => (
-        <label className="flex items-center gap-2 cursor-pointer">
-            <div
-                className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-indigo-500' : 'bg-gray-200'}`}
-                onClick={onChange}
-            >
-                <div className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${checked ? 'translate-x-4' : ''}`} />
-            </div>
-            <span className="text-sm text-gray-600">{label}</span>
-        </label>
-    );
 
     return (
         <div className="min-h-screen bg-[#f5f7fb] text-gray-800">
@@ -103,43 +90,17 @@ const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '' }) => {
                     </p>
                 </div>
 
-                {/* Preferences toggle */}
+                {/* Profile Selector */}
                 <div className="mb-8 animate-slide-up">
-                    <button
-                        onClick={() => setShowProfile(p => !p)}
-                        className="w-full text-left glass-strong px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
-                    >
-                        <span className="text-gray-700 font-semibold text-sm">My Preferences</span>
-                        <span className="text-gray-400 text-xs">{showProfile ? '▲' : '▼'}</span>
-                    </button>
-                    {showProfile && (
-                        <div className="glass p-5 mt-2 space-y-4 animate-fade-in">
-                            <div className="flex flex-wrap gap-6">
-                                <Toggle label="Vegan" checked={profile.vegan} onChange={() => setProfile(p => ({ ...p, vegan: !p.vegan }))} />
-                                <Toggle label="Vegetarian" checked={profile.vegetarian} onChange={() => setProfile(p => ({ ...p, vegetarian: !p.vegetarian }))} />
-                                <Toggle label="Halal" checked={profile.halal} onChange={() => setProfile(p => ({ ...p, halal: !p.halal }))} />
-                            </div>
-                            <input
-                                value={profile.allergies}
-                                onChange={e => setProfile(p => ({ ...p, allergies: e.target.value }))}
-                                placeholder="Allergies (comma-separated, e.g. peanuts, milk)"
-                                className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-800 placeholder-gray-400 focus:outline-none focus:border-indigo-400 transition-colors"
-                            />
-                            <input
-                                value={profile.caffeine_limit_mg}
-                                onChange={e => setProfile(p => ({ ...p, caffeine_limit_mg: e.target.value }))}
-                                placeholder="Caffeine limit (mg, optional)"
-                                type="number"
-                                className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-800 placeholder-gray-400 focus:outline-none focus:border-indigo-400 transition-colors"
-                            />
-                            <input
-                                value={profile.avoid_terms}
-                                onChange={e => setProfile(p => ({ ...p, avoid_terms: e.target.value }))}
-                                placeholder="Avoid terms (comma-separated, e.g. palm oil, MSG)"
-                                className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-800 placeholder-gray-400 focus:outline-none focus:border-indigo-400 transition-colors"
-                            />
-                        </div>
-                    )}
+                    <div className="glass-strong px-5 py-4">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                            Scoring for
+                        </label>
+                        <ProfileSelector
+                            selectedId={selectedProfileId}
+                            onSelect={handleProfileSelect}
+                        />
+                    </div>
                 </div>
 
                 {/* ── Primary action: Upload label photo ─── */}

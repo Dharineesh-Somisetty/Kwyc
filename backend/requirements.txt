@@ -9,3 +9,5 @@ groq>=0.11.0
 pytesseract>=0.3.13
 Pillow>=11.0.0
 psycopg2-binary>=2.9.9
+PyJWT[crypto]>=2.8.0
+certifi>=2024.0.0

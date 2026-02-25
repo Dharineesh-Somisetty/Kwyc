@@ -73,7 +73,7 @@ const ViewToggle = ({ view, onChange }) => {
 /* ═══════════════════════════════════════════════════
    ResultsPage
    ═══════════════════════════════════════════════════ */
-const ResultsPage = ({ data, onReset }) => {
+const ResultsPage = ({ data, onReset, scoredForName }) => {
     const {
         session_id,
         product,
@@ -180,6 +180,11 @@ const ResultsPage = ({ data, onReset }) => {
                         </p>
                     )}
                     <NutritionStatusBadge status={nutritionStatus} source={nutrition_source} />
+                    {scoredForName && (
+                        <p className="mt-2 text-xs text-indigo-500 font-medium">
+                            Scored for: {scoredForName}
+                        </p>
+                    )}
                 </div>
 
                 {/* ╔══════════════════════════════════════╗

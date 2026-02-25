@@ -210,6 +210,7 @@ class ChatAnswerResult(BaseModel):
 class BarcodeScanRequest(BaseModel):
     barcode: str
     user_profile: UserProfile = Field(default_factory=UserProfile)
+    profile_id: Optional[str] = None   # household profile to score for
 
 class LabelScanRequest(BaseModel):
     """Multipart – user_profile sent as JSON string field."""
@@ -224,4 +225,35 @@ class ChatResponse(BaseModel):
     answer: str
     citations_used: List[str] = Field(default_factory=list)
     disclaimer: str = "Educational only; not medical advice."
+
+
+# ──────────────────────────────────────────────
+# Household Profile CRUD schemas
+# ──────────────────────────────────────────────
+class ProfileCreate(BaseModel):
+    name: str = "Me"
+    allergies: List[str] = Field(default_factory=list)
+    avoid_terms: List[str] = Field(default_factory=list)
+    diet_style: Optional[str] = None          # vegan | vegetarian | halal
+    is_default: bool = False
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    allergies: Optional[List[str]] = None
+    avoid_terms: Optional[List[str]] = None
+    diet_style: Optional[str] = None
+    is_default: Optional[bool] = None
+
+class ProfileResponse(BaseModel):
+    id: str
+    name: str
+    allergies: List[str] = Field(default_factory=list)
+    avoid_terms: List[str] = Field(default_factory=list)
+    diet_style: Optional[str] = None
+    is_default: bool = False
+    created_at: Optional[datetime.datetime] = None
+    updated_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
 

@@ -32,7 +32,9 @@ from .schemas import (
     AnalysisResult, ProductMeta, UserProfile, EvidenceSnippet,
     ProductScore, Nutrition, NutritionFacts, LabelExtraction,
     PortionInfo, NutritionScoreInfo,
+    ProfileCreate, ProfileUpdate, ProfileResponse,
 )
+from .auth import AuthUser, get_current_user, get_optional_user
 from .services.off_service import fetch_product_from_off
 from .services.groq_service import (
     extract_label_sections,
@@ -122,6 +124,202 @@ async def rate_limit_middleware(request: Request, call_next):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "LabelLens API"}
+
+
+# ── Profile helpers ──────────────────────────────────────────────
+def _get_entitlement(db: DBSession, user_id: str) -> models.UserEntitlement:
+    """Return the user entitlement row, creating a free-tier default if missing."""
+    ent = db.query(models.UserEntitlement).filter(
+        models.UserEntitlement.user_id == user_id
+    ).first()
+    if not ent:
+        ent = models.UserEntitlement(user_id=user_id, plan="free", max_profiles=1)
+        db.add(ent)
+        db.commit()
+        db.refresh(ent)
+    return ent
+
+
+def _profile_to_user_profile(profile: models.Profile) -> UserProfile:
+    """Convert a DB Profile row into the UserProfile schema used by the scorer."""
+    diet = (profile.diet_style or "").lower()
+    return UserProfile(
+        vegan=diet == "vegan",
+        vegetarian=diet in ("vegetarian", "vegan"),
+        halal=diet == "halal",
+        allergies=profile.allergies or [],
+        avoid_terms=profile.avoid_terms or [],
+    )
+
+
+def _resolve_profile(
+    db: DBSession, user_id: str | None, profile_id: str | None
+) -> UserProfile | None:
+    """Resolve an optional profile_id to a UserProfile.
+
+    Returns None when no authenticated user or profile_id, letting the
+    caller fall back to the inline user_profile from the request body.
+    """
+    if not user_id:
+        return None
+    if profile_id:
+        p = db.query(models.Profile).filter(
+            models.Profile.id == profile_id,
+            models.Profile.user_id == user_id,
+        ).first()
+        if p:
+            return _profile_to_user_profile(p)
+    # Try the user's default profile
+    p = db.query(models.Profile).filter(
+        models.Profile.user_id == user_id,
+        models.Profile.is_default == True,
+    ).first()
+    if p:
+        return _profile_to_user_profile(p)
+    return None
+
+
+# ── Profile CRUD endpoints ──────────────────────────────────────
+@app.get("/api/profiles", response_model=list[ProfileResponse])
+def list_profiles(
+    user: AuthUser = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """List all profiles for the authenticated user."""
+    rows = (
+        db.query(models.Profile)
+        .filter(models.Profile.user_id == user.sub)
+        .order_by(models.Profile.created_at)
+        .all()
+    )
+    return [ProfileResponse.model_validate(r) for r in rows]
+
+
+@app.post("/api/profiles", response_model=ProfileResponse, status_code=201)
+def create_profile(
+    body: ProfileCreate,
+    user: AuthUser = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Create a new household profile (subject to plan limits)."""
+    ent = _get_entitlement(db, user.sub)
+    existing = (
+        db.query(models.Profile)
+        .filter(models.Profile.user_id == user.sub)
+        .count()
+    )
+    if existing >= ent.max_profiles:
+        raise HTTPException(
+            403,
+            f"Profile limit reached ({ent.max_profiles}). "
+            "Upgrade to premium for more profiles.",
+        )
+
+    # If this is the first profile, force is_default = True
+    is_default = body.is_default or (existing == 0)
+
+    # If setting as default, clear other defaults
+    if is_default:
+        db.query(models.Profile).filter(
+            models.Profile.user_id == user.sub,
+            models.Profile.is_default == True,
+        ).update({"is_default": False})
+
+    row = models.Profile(
+        user_id=user.sub,
+        name=body.name,
+        allergies=body.allergies,
+        avoid_terms=body.avoid_terms,
+        diet_style=body.diet_style,
+        is_default=is_default,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return ProfileResponse.model_validate(row)
+
+
+@app.patch("/api/profiles/{profile_id}", response_model=ProfileResponse)
+def update_profile(
+    profile_id: str,
+    body: ProfileUpdate,
+    user: AuthUser = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Update an existing profile."""
+    row = db.query(models.Profile).filter(
+        models.Profile.id == profile_id,
+        models.Profile.user_id == user.sub,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Profile not found.")
+
+    update_data = body.model_dump(exclude_unset=True)
+
+    # Handle default toggle
+    if update_data.get("is_default"):
+        db.query(models.Profile).filter(
+            models.Profile.user_id == user.sub,
+            models.Profile.is_default == True,
+        ).update({"is_default": False})
+
+    for key, val in update_data.items():
+        setattr(row, key, val)
+    db.commit()
+    db.refresh(row)
+    return ProfileResponse.model_validate(row)
+
+
+@app.delete("/api/profiles/{profile_id}", status_code=204)
+def delete_profile(
+    profile_id: str,
+    user: AuthUser = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Delete a profile."""
+    row = db.query(models.Profile).filter(
+        models.Profile.id == profile_id,
+        models.Profile.user_id == user.sub,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Profile not found.")
+    was_default = row.is_default
+    db.delete(row)
+    db.commit()
+    # If the deleted profile was default, promote the oldest remaining
+    if was_default:
+        oldest = (
+            db.query(models.Profile)
+            .filter(models.Profile.user_id == user.sub)
+            .order_by(models.Profile.created_at)
+            .first()
+        )
+        if oldest:
+            oldest.is_default = True
+            db.commit()
+
+
+@app.post("/api/profiles/{profile_id}/default", response_model=ProfileResponse)
+def set_default_profile(
+    profile_id: str,
+    user: AuthUser = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Mark a profile as the default."""
+    row = db.query(models.Profile).filter(
+        models.Profile.id == profile_id,
+        models.Profile.user_id == user.sub,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Profile not found.")
+    db.query(models.Profile).filter(
+        models.Profile.user_id == user.sub,
+        models.Profile.is_default == True,
+    ).update({"is_default": False})
+    row.is_default = True
+    db.commit()
+    db.refresh(row)
+    return ProfileResponse.model_validate(row)
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -262,7 +460,17 @@ async def _run_analysis_pipeline(
 
 # ── POST /api/scan/barcode ───────────────────────────────────────
 @app.post("/api/scan/barcode", response_model=AnalysisResult)
-async def scan_barcode(req: BarcodeScanRequest, db: DBSession = Depends(get_db)):
+async def scan_barcode(
+    req: BarcodeScanRequest,
+    db: DBSession = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+):
+    # Resolve profile: prefer profile_id → default profile → inline user_profile
+    profile = (
+        _resolve_profile(db, user.sub if user else None, req.profile_id)
+        or req.user_profile
+    )
+
     off = fetch_product_from_off(req.barcode)
 
     # ── Path A: OFF has product with ingredients ──────────────────
@@ -313,7 +521,7 @@ async def scan_barcode(req: BarcodeScanRequest, db: DBSession = Depends(get_db))
                 logger.info("Using cached nutrition for barcode=%s", req.barcode)
 
         result = await _run_analysis_pipeline(
-            ingredients_text, product, req.user_profile, db,
+            ingredients_text, product, profile, db,
             nutrition=nutrition_obj,
             product_categories=categories,
             nutrition_per_serving=cached_nutrition_per_serving,
@@ -365,7 +573,7 @@ async def scan_barcode(req: BarcodeScanRequest, db: DBSession = Depends(get_db))
                     pass
 
         result = await _run_analysis_pipeline(
-            cached["ingredients_text"], product, req.user_profile, db,
+            cached["ingredients_text"], product, profile, db,
             nutrition=nutrition_obj,
             nutrition_per_serving=cached_nutrition_per_serving,
         )
@@ -386,11 +594,19 @@ async def scan_label(
     image: UploadFile = File(...),
     user_profile: str = Form("{}"),
     barcode: str = Form(""),
+    profile_id: str = Form(""),
     db: DBSession = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
 ):
     """Accept a label image, extract ingredients + nutrition via Groq vision,
     then run the full analysis pipeline."""
-    profile = UserProfile(**json.loads(user_profile))
+    # Resolve profile: prefer profile_id → default profile → inline form data
+    profile = (
+        _resolve_profile(
+            db, user.sub if user else None, profile_id or None
+        )
+        or UserProfile(**json.loads(user_profile))
+    )
 
     # 1. Read image bytes
     img_bytes = await image.read()
