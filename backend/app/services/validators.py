@@ -29,6 +29,34 @@ SAFE_DISCLAIMER = (
 )
 
 
+# Patterns that indicate a legitimate allergen declaration
+_ALLERGEN_STMT_PATTERN = re.compile(
+    r"(contain|may contain|produced in|processed in|traces of|"
+    r"manufactured in|shared (equipment|facility)|free from|allergen)",
+    re.IGNORECASE,
+)
+
+# Patterns that indicate LLM hallucination / misclassified content
+_ALLERGEN_STMT_REJECT = re.compile(
+    r"(highly processed|minimally processed|ultra.processed|"
+    r"moderately processed|processing level|not healthy|unhealthy|"
+    r"nutritional value|calorie dense|health risk)",
+    re.IGNORECASE,
+)
+
+
+def _filter_allergen_statements(statements: List[str]) -> List[str]:
+    """Keep only legitimate allergen declarations, reject LLM opinions."""
+    filtered = []
+    for stmt in statements:
+        # Reject statements that are clearly about processing / health opinions
+        if _ALLERGEN_STMT_REJECT.search(stmt):
+            logger.warning("Rejected non-allergen statement from allergen_statements: %s", stmt)
+            continue
+        filtered.append(stmt)
+    return filtered
+
+
 def validate_structured_ingredients(
     result: StructuredIngredientsResult,
 ) -> StructuredIngredientsResult:
@@ -42,6 +70,12 @@ def validate_structured_ingredients(
         if ing.name_canonical:
             valid.append(ing)
     result.ingredients = valid
+
+    # Filter allergen_statements to remove LLM hallucinations
+    result.allergen_statements = _filter_allergen_statements(
+        result.allergen_statements or []
+    )
+
     return result
 
 

@@ -272,7 +272,7 @@ For each ingredient:
 
 Also identify:
 - umbrella_terms: vague terms like "natural flavors", "spices", "artificial colors"
-- allergen_statements: any "contains" or "may contain" allergen declarations
+- allergen_statements: ONLY explicit allergen declarations found verbatim on the label, such as "contains ...", "may contain ...", "produced in a facility that also processes ...", or "traces of ..." statements. Do NOT add any opinions, analysis, or commentary about processing level, healthiness, or product quality. Only extract the actual allergen warning text from the label.
 
 Raw ingredient text:
 \"\"\"

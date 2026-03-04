@@ -115,6 +115,12 @@
   .stat-card-red {
     @apply stat-card bg-gradient-to-br from-red-50 to-red-100 border border-red-100;
   }
+  .stat-card-blue {
+    @apply stat-card bg-gradient-to-br from-sky-50 to-sky-100 border border-sky-100;
+  }
+  .stat-card-cyan {
+    @apply stat-card bg-gradient-to-br from-teal-50 to-teal-100 border border-teal-100;
+  }
 }
 
 @layer utilities {

@@ -467,6 +467,7 @@ async def _run_analysis_pipeline(
             nutrition_per_serving=per_serving_dict,
             product_name=product.name,
             product_categories=product_categories,
+            allergen_statements=structured.allergen_statements,
         )
         result.product_score = ProductScore(**score_dict)
     except Exception as exc:

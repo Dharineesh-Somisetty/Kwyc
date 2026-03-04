@@ -159,17 +159,21 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
     const buildStatCards = () => {
         if (nutritionView === 'serving' && nutrition_per_serving) {
             return [
-                { label: 'Sodium',   value: nutrition_per_serving.sodium_mg,       unit: 'mg', warn: v => v > 600, cardClass: 'stat-card-purple', color: '#6366f1', sparkVariant: 'bar', suffix: '/serving' },
-                { label: 'Sugars',   value: nutrition_per_serving.total_sugars_g,  unit: 'g',  warn: v => v > 12,  cardClass: 'stat-card-amber',  color: '#f59e0b', sparkVariant: 'wave', suffix: '/serving' },
-                { label: 'Sat Fat',  value: nutrition_per_serving.saturated_fat_g, unit: 'g',  warn: v => v > 5,   cardClass: 'stat-card-red',    color: '#ef4444', sparkVariant: 'bar', suffix: '/serving' },
-                { label: 'Fiber',    value: nutrition_per_serving.fiber_g,         unit: 'g',  warn: () => false,   cardClass: 'stat-card-green',  color: '#10b981', sparkVariant: 'wave', suffix: '/serving' },
+                { label: 'Calories', value: nutrition_per_serving.calories,        unit: 'kcal', warn: v => v > 400, cardClass: 'stat-card-cyan',   color: '#14b8a6', sparkVariant: 'wave', suffix: '/serving' },
+                { label: 'Sodium',   value: nutrition_per_serving.sodium_mg,       unit: 'mg',   warn: v => v > 600, cardClass: 'stat-card-purple', color: '#6366f1', sparkVariant: 'bar',  suffix: '/serving' },
+                { label: 'Sugars',   value: nutrition_per_serving.total_sugars_g,  unit: 'g',    warn: v => v > 12,  cardClass: 'stat-card-amber',  color: '#f59e0b', sparkVariant: 'wave', suffix: '/serving' },
+                { label: 'Sat Fat',  value: nutrition_per_serving.saturated_fat_g, unit: 'g',    warn: v => v > 5,   cardClass: 'stat-card-red',    color: '#ef4444', sparkVariant: 'bar',  suffix: '/serving' },
+                { label: 'Fiber',    value: nutrition_per_serving.fiber_g,         unit: 'g',    warn: () => false,   cardClass: 'stat-card-green',  color: '#10b981', sparkVariant: 'wave', suffix: '/serving' },
+                { label: 'Protein',  value: nutrition_per_serving.protein_g,       unit: 'g',    warn: () => false,   cardClass: 'stat-card-blue',   color: '#0ea5e9', sparkVariant: 'bar',  suffix: '/serving' },
             ];
         }
         return [
-            { label: 'Sodium',   value: nutrition?.sodium_mg_100g,  unit: 'mg', warn: v => v > 600, cardClass: 'stat-card-purple', color: '#6366f1', sparkVariant: 'bar', suffix: '/100g' },
-            { label: 'Sugars',   value: nutrition?.sugars_g_100g,   unit: 'g',  warn: v => v > 12,  cardClass: 'stat-card-amber',  color: '#f59e0b', sparkVariant: 'wave', suffix: '/100g' },
-            { label: 'Sat Fat',  value: nutrition?.sat_fat_g_100g,  unit: 'g',  warn: v => v > 5,   cardClass: 'stat-card-red',    color: '#ef4444', sparkVariant: 'bar', suffix: '/100g' },
-            { label: 'Fiber',    value: nutrition?.fiber_g_100g,    unit: 'g',  warn: () => false,   cardClass: 'stat-card-green',  color: '#10b981', sparkVariant: 'wave', suffix: '/100g' },
+            { label: 'Calories', value: nutrition?.energy_kcal_100g, unit: 'kcal', warn: v => v > 400, cardClass: 'stat-card-cyan',   color: '#14b8a6', sparkVariant: 'wave', suffix: '/100g' },
+            { label: 'Sodium',   value: nutrition?.sodium_mg_100g,   unit: 'mg',   warn: v => v > 600, cardClass: 'stat-card-purple', color: '#6366f1', sparkVariant: 'bar',  suffix: '/100g' },
+            { label: 'Sugars',   value: nutrition?.sugars_g_100g,    unit: 'g',    warn: v => v > 12,  cardClass: 'stat-card-amber',  color: '#f59e0b', sparkVariant: 'wave', suffix: '/100g' },
+            { label: 'Sat Fat',  value: nutrition?.sat_fat_g_100g,   unit: 'g',    warn: v => v > 5,   cardClass: 'stat-card-red',    color: '#ef4444', sparkVariant: 'bar',  suffix: '/100g' },
+            { label: 'Fiber',    value: nutrition?.fiber_g_100g,     unit: 'g',    warn: () => false,   cardClass: 'stat-card-green',  color: '#10b981', sparkVariant: 'wave', suffix: '/100g' },
+            { label: 'Protein',  value: nutrition?.protein_g_100g,   unit: 'g',    warn: () => false,   cardClass: 'stat-card-blue',   color: '#0ea5e9', sparkVariant: 'bar',  suffix: '/100g' },
         ];
     };
     const statCards = buildStatCards();
@@ -215,6 +219,34 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
                         </p>
                     )}
                 </div>
+
+                {/* ╔══════════════════════════════════════╗
+                   ║  ALLERGEN / DIET FLAGS (top priority) ║
+                   ╚══════════════════════════════════════╝ */}
+                {flags.length > 0 && (
+                    <div className="glass-strong p-6 mb-4 animate-fade-in">
+                        <h2 className="text-lg font-bold mb-3 text-gray-800">Flags</h2>
+                        <div className="space-y-3">
+                            {flags.map((f, i) => (
+                                <div key={i} className={`border-l-4 rounded-2xl p-4 ${severityColor[f.severity] || severityColor.info}`}>
+                                    <div className="flex items-start gap-2">
+                                        <div>
+                                            <span className="font-semibold text-sm uppercase tracking-wide">
+                                                {f.type.replace('_', ' ')}
+                                            </span>
+                                            <p className="mt-1 text-sm">{f.message}</p>
+                                            {f.related_ingredients.length > 0 && (
+                                                <p className="mt-1 text-xs opacity-70">
+                                                    Related: {f.related_ingredients.join(', ')}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* ╔══════════════════════════════════════╗
                    ║  2 - SCORE + STATS (tighter grid)    ║
@@ -289,20 +321,20 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
                                     {nutritionView === 'serving' ? 'per serving' : 'per 100 g'}
                                 </span>
                             </div>
-                            <div className="grid grid-cols-2 gap-3 flex-1">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 flex-1">
                                 {statCards.map((c, i) => {
                                     const isWarn = typeof c.warn === 'function' && c.value != null && c.warn(c.value);
                                     return (
                                         <div key={i} className={c.cardClass}>
                                             <div className="flex items-start justify-between">
                                                 <div>
-                                                    <p className="text-xs font-medium text-gray-500 mb-1">{c.label}</p>
-                                                    <p className={`text-2xl font-bold ${isWarn ? 'text-amber-700' : 'text-gray-800'}`}>
+                                                    <p className="text-sm font-semibold text-gray-500 mb-1">{c.label}</p>
+                                                    <p className={`text-3xl font-bold ${isWarn ? 'text-amber-700' : 'text-gray-800'}`}>
                                                         {c.value != null ? (Number.isFinite(c.value) ? parseFloat(c.value.toFixed(1)) : c.value) : '--'}
-                                                        <span className="text-sm font-normal text-gray-500 ml-1">{c.unit}</span>
+                                                        <span className="text-base font-normal text-gray-500 ml-1">{c.unit}</span>
                                                     </p>
                                                 </div>
-                                                <Sparkline color={c.color} width={64} height={28} variant={c.sparkVariant} />
+                                                <Sparkline color={c.color} width={56} height={24} variant={c.sparkVariant} />
                                             </div>
                                         </div>
                                     );
@@ -437,32 +469,6 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
                         <p className="text-[10px] text-gray-400 mt-2 text-right">
                             Source: {nutrition.source || 'OpenFoodFacts'}
                         </p>
-                    </div>
-                )}
-
-                {/* Flags */}
-                {flags.length > 0 && (
-                    <div className="glass-strong p-6 mb-4 animate-slide-up" style={{ animationDelay: '0.1s' }}>
-                        <h2 className="text-lg font-bold mb-3 text-gray-800">Flags</h2>
-                        <div className="space-y-3">
-                            {flags.map((f, i) => (
-                                <div key={i} className={`border-l-4 rounded-2xl p-4 ${severityColor[f.severity] || severityColor.info}`}>
-                                    <div className="flex items-start gap-2">
-                                        <div>
-                                            <span className="font-semibold text-sm uppercase tracking-wide">
-                                                {f.type.replace('_', ' ')}
-                                            </span>
-                                            <p className="mt-1 text-sm">{f.message}</p>
-                                            {f.related_ingredients.length > 0 && (
-                                                <p className="mt-1 text-xs opacity-70">
-                                                    Related: {f.related_ingredients.join(', ')}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
                     </div>
                 )}
 

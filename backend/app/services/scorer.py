@@ -977,10 +977,12 @@ def _personalization_overlay(
     ingredients: List[str],
     user_profile: Dict[str, Any],
     matched_entries: Optional[Dict[str, Dict]],
+    allergen_statements: Optional[List[str]] = None,
 ) -> tuple[int, List[str]]:
     """Apply allergy / avoid-term penalties. Returns (adjusted_score, conflicts)."""
     conflicts: List[str] = []
     matched_entries = matched_entries or {}
+    allergen_statements = allergen_statements or []
 
     allergies = [a.strip().lower() for a in (user_profile.get("allergies") or []) if a]
 
@@ -996,10 +998,19 @@ def _personalization_overlay(
             if allergy in ing_norm or ing_norm in allergy:
                 conflicts.append(f"Allergy: '{allergy}' matches ingredient '{ing}'.")
                 return 0, conflicts
+            # Also try singularized / pluralized forms
+            allergy_singular = allergy.rstrip("s")
+            if allergy_singular and (allergy_singular in ing_norm or ing_norm in allergy_singular):
+                conflicts.append(f"Allergy: '{allergy}' matches ingredient '{ing}'.")
+                return 0, conflicts
             for t in tags:
                 if t.startswith("allergen-"):
                     tag_allergen = t.replace("allergen-", "")
                     if tag_allergen in allergy or allergy in tag_allergen:
+                        conflicts.append(f"Allergy: '{allergy}' matches tag '{t}' on '{ing}'.")
+                        return 0, conflicts
+                    tag_singular = tag_allergen.rstrip("s")
+                    if tag_singular and (tag_singular in allergy or allergy.rstrip("s") in tag_singular):
                         conflicts.append(f"Allergy: '{allergy}' matches tag '{t}' on '{ing}'.")
                         return 0, conflicts
 
@@ -1008,6 +1019,19 @@ def _personalization_overlay(
                 penalty = 25 if idx < 5 else 15
                 score = max(0, score - penalty)
                 conflicts.append(f"Avoid-term: '{term}' found in '{ing}' → −{penalty}")
+
+    # ── Second pass: scan allergen_statements ("Contains: ...") ──
+    # These are label declarations that may reference allergens not in the
+    # ingredient list itself (e.g. cross-contamination warnings).
+    if allergies and allergen_statements:
+        combined_text = " ".join(allergen_statements).lower()
+        for allergy in allergies:
+            allergy_singular = allergy.rstrip("s")
+            if allergy in combined_text or (allergy_singular and allergy_singular in combined_text):
+                conflicts.append(
+                    f"Allergy: '{allergy}' found in allergen statement on label."
+                )
+                return 0, conflicts
 
     return score, conflicts
 
@@ -1238,6 +1262,7 @@ def calculate_product_score(
     nutrition_per_serving: Any = None,
     product_name: Optional[str] = None,
     product_categories: Optional[List[str]] = None,
+    allergen_statements: Optional[List[str]] = None,
     # Aliases for flexible calling
     ingredients_detected: Optional[List[str]] = None,
     categories: Optional[List[str]] = None,
@@ -1564,6 +1589,7 @@ def calculate_product_score(
     # ── Personalization overlay (only affects final_score) ────
     final_score, conflicts = _personalization_overlay(
         final_base, ingredients, user_profile, matched_entries,
+        allergen_statements=allergen_statements,
     )
 
     final_grade = _grade(final_score)
