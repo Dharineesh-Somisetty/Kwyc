@@ -78,6 +78,23 @@ logger.info(
 )
 
 
+from fastapi.exceptions import ResponseValidationError
+
+@app.exception_handler(ResponseValidationError)
+async def response_validation_handler(request: Request, exc: ResponseValidationError):
+    """Log and return response validation errors (normally silent 500s)."""
+    logger.exception("ResponseValidationError: %s", exc)
+    origin = request.headers.get("origin", "")
+    headers: dict[str, str] = {}
+    if origin in ALLOWED_ORIGINS:
+        headers["access-control-allow-origin"] = origin
+        headers["access-control-allow-credentials"] = "true"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Response validation error: {exc}"},
+        headers=headers,
+    )
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Return real error details instead of generic 500."""
@@ -194,13 +211,20 @@ def list_profiles(
     db: DBSession = Depends(get_db),
 ):
     """List all profiles for the authenticated user."""
-    rows = (
-        db.query(models.Profile)
-        .filter(models.Profile.user_id == user.sub)
-        .order_by(models.Profile.created_at)
-        .all()
-    )
-    return [ProfileResponse.model_validate(r) for r in rows]
+    try:
+        logger.info("list_profiles called for user=%s", user.sub)
+        rows = (
+            db.query(models.Profile)
+            .filter(models.Profile.user_id == user.sub)
+            .order_by(models.Profile.created_at)
+            .all()
+        )
+        result = [ProfileResponse.model_validate(r) for r in rows]
+        logger.info("list_profiles returning %d profiles", len(result))
+        return result
+    except Exception as exc:
+        logger.exception("list_profiles FAILED: %s", exc)
+        raise
 
 
 @app.post("/api/profiles", response_model=ProfileResponse, status_code=201)

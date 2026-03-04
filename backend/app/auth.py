@@ -19,24 +19,25 @@ from fastapi import HTTPException, Request
 
 logger = logging.getLogger("labellens.auth")
 
-SUPABASE_JWKS_URL = os.getenv("SUPABASE_JWKS_URL", "")
-SUPABASE_ISSUER = os.getenv("SUPABASE_ISSUER", "")
-SUPABASE_AUDIENCE = os.getenv("SUPABASE_AUDIENCE", "authenticated")
-
-# Lazily initialised PyJWKClient (cached; thread-safe)
+# Lazily initialised PyJWKClient keyed by URL (survives hot-reloads)
 _jwks_client = None
+_jwks_client_url = None
 
 
 def _get_jwks_client():
-    global _jwks_client
-    if _jwks_client is None:
+    global _jwks_client, _jwks_client_url
+    jwks_url = os.getenv("SUPABASE_JWKS_URL", "")
+    if not jwks_url:
+        raise HTTPException(503, "Auth not configured (SUPABASE_JWKS_URL missing)")
+    # Re-create client if URL changed (e.g. after env reload)
+    if _jwks_client is None or _jwks_client_url != jwks_url:
         try:
             from jwt import PyJWKClient
         except ImportError as exc:
             raise HTTPException(500, f"Missing dependency: {exc}")
-        if not SUPABASE_JWKS_URL:
-            raise HTTPException(503, "Auth not configured (SUPABASE_JWKS_URL missing)")
-        _jwks_client = PyJWKClient(SUPABASE_JWKS_URL, cache_keys=True)
+        logger.info("Initializing JWKS client for: %s", jwks_url)
+        _jwks_client = PyJWKClient(jwks_url, cache_keys=True)
+        _jwks_client_url = jwks_url
     return _jwks_client
 
 
@@ -46,8 +47,12 @@ def _verify_supabase_jwt(token: str) -> Dict[str, Any]:
     except ImportError as exc:
         raise HTTPException(500, f"Missing dependency: {exc}")
 
-    if not SUPABASE_JWKS_URL:
+    jwks_url = os.getenv("SUPABASE_JWKS_URL", "")
+    if not jwks_url:
         raise HTTPException(503, "Auth not configured (SUPABASE_JWKS_URL missing)")
+
+    issuer = os.getenv("SUPABASE_ISSUER", "")
+    audience = os.getenv("SUPABASE_AUDIENCE", "authenticated")
 
     try:
         client = _get_jwks_client()
@@ -56,12 +61,12 @@ def _verify_supabase_jwt(token: str) -> Dict[str, Any]:
         payload = pyjwt.decode(
             token,
             signing_key.key,
-            algorithms=["ES256"],
-            audience=SUPABASE_AUDIENCE if SUPABASE_AUDIENCE else None,
-            issuer=SUPABASE_ISSUER if SUPABASE_ISSUER else None,
+            algorithms=["ES256", "RS256"],
+            audience=audience if audience else None,
+            issuer=issuer if issuer else None,
             options={
-                "verify_aud": bool(SUPABASE_AUDIENCE),
-                "verify_iss": bool(SUPABASE_ISSUER),
+                "verify_aud": bool(audience),
+                "verify_iss": bool(issuer),
             },
         )
         return payload
