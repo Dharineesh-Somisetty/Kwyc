@@ -7,6 +7,7 @@ import ResultsPage from './components/ResultsPage';
 import AccountDrawer from './components/AccountDrawer';
 import ProfilesManagePage from './components/ProfilesManagePage';
 import { scanBarcode, scanLabel } from './services/api';
+import evaluateOcrQuality from './utils/evaluateOcrQuality';
 
 function AppInner() {
   const { session, user, loading: authLoading, signOut } = useAuth();
@@ -19,6 +20,9 @@ function AppInner() {
   const [lastBarcode, setLastBarcode] = useState('');
   const [scoredForName, setScoredForName] = useState('');
   const [showAccountDrawer, setShowAccountDrawer] = useState(false);
+
+  // OCR quality gate: when label OCR is poor, stay on scan view with quality info
+  const [ocrQualityInfo, setOcrQualityInfo] = useState(null); // { ok, reasons, rawText, result }
 
   // Show a simple spinner while Supabase checks the session
   if (authLoading) {
@@ -37,8 +41,9 @@ function AppInner() {
     return <Login onSwitch={() => setAuthView('signup')} />;
   }
 
-  const handleScanResult = async ({ type, barcode, imageFile, userProfile, profileId, profileName }) => {
+  const handleScanResult = async ({ type, barcode, imageFile, userProfile, profileId, profileName, skipQualityCheck }) => {
     setError(null);
+    setOcrQualityInfo(null);
     setIsLoading(true);
     setView('loading');
     setScoredForName(profileName || '');
@@ -52,6 +57,18 @@ function AppInner() {
         const barcodeToSend = barcode || lastBarcode;
         result = await scanLabel(imageFile, userProfile, barcodeToSend, profileId);
         setLastBarcode('');
+
+        // OCR quality gate for label scans (unless user chose "continue anyway")
+        if (!skipQualityCheck) {
+          const rawText = result.ingredients_raw_text || '';
+          const quality = evaluateOcrQuality(rawText);
+          if (!quality.ok) {
+            setOcrQualityInfo({ ...quality, rawText, result });
+            setView('scan');
+            setIsLoading(false);
+            return;
+          }
+        }
       }
       setAnalysisResult(result);
       setView('results');
@@ -116,7 +133,20 @@ function AppInner() {
       )}
 
       {view === 'scan' && (
-        <ScanPage onScanResult={handleScanResult} isLoading={isLoading} lastFailedBarcode={lastBarcode} />
+        <ScanPage
+          onScanResult={handleScanResult}
+          isLoading={isLoading}
+          lastFailedBarcode={lastBarcode}
+          ocrQualityInfo={ocrQualityInfo}
+          onAcceptPendingResult={() => {
+            if (ocrQualityInfo?.result) {
+              setAnalysisResult(ocrQualityInfo.result);
+              setOcrQualityInfo(null);
+              setView('results');
+            }
+          }}
+          onClearOcrQuality={() => setOcrQualityInfo(null)}
+        />
       )}
 
       {view === 'loading' && (
