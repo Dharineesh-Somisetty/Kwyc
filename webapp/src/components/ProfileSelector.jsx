@@ -98,10 +98,18 @@ export default function ProfileSelector({ selectedId, onSelect }) {
             <button onClick={() => setError('')} className="text-red-400">&#x2715;</button>
           </div>
         )}
-        <p className="text-xs text-gray-400">No profiles yet.</p>
+        <div className="flex items-start gap-3 bg-brandTint border border-brandLine rounded-xl p-3">
+          <svg className="w-5 h-5 text-brandDeep shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+          </svg>
+          <div>
+            <p className="text-sm text-brandDeep font-medium">Set up your health profile for personalized results</p>
+            <p className="text-xs text-gray-500 mt-0.5">Add your allergies and dietary preferences to get tailored ingredient analysis.</p>
+          </div>
+        </div>
         <button
           onClick={() => { setEditTarget({}); setShowModal(true); }}
-          className="text-sm text-brandDeep hover:text-brand font-medium"
+          className="text-sm text-brandDeep hover:text-brand font-medium min-h-[44px]"
         >
           + Create your first profile
         </button>

@@ -190,7 +190,8 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
                 {/* -- Back button ---------------------- */}
                 <button
                     onClick={onReset}
-                    className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brandDeep mb-6 transition-colors"
+                    aria-label="Back to scan"
+                    className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brandDeep mb-6 transition-colors min-h-[44px]"
                 >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
@@ -202,6 +203,38 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
                    ║  1 - HEADER CARD                     ║
                    ╚══════════════════════════════════════╝ */}
                 <div className="glass-strong p-6 mb-4 text-center animate-fade-in">
+                    {/* ── Prominent Health Score Badge ──────── */}
+                    {product_score && (
+                        <div className="mb-4">
+                            <div className={`inline-flex items-center gap-3 px-6 py-3 rounded-2xl border-2 ${
+                                displayScore >= 70 ? 'bg-emerald-50 border-emerald-200' :
+                                displayScore >= 40 ? 'bg-amber-50 border-amber-200' :
+                                'bg-red-50 border-red-200'
+                            }`}>
+                                <span className={`text-4xl font-extrabold ${
+                                    displayScore >= 70 ? 'text-emerald-600' :
+                                    displayScore >= 40 ? 'text-amber-600' :
+                                    'text-red-600'
+                                }`}>
+                                    {Math.round(displayScore)}
+                                </span>
+                                <div className="text-left">
+                                    <span className={`block text-sm font-bold ${
+                                        displayScore >= 70 ? 'text-emerald-700' :
+                                        displayScore >= 40 ? 'text-amber-700' :
+                                        'text-red-700'
+                                    }`}>
+                                        {displayScore >= 85 ? 'Excellent' :
+                                         displayScore >= 70 ? 'Good' :
+                                         displayScore >= 55 ? 'Fair' :
+                                         displayScore >= 40 ? 'Poor' : 'Avoid'}
+                                    </span>
+                                    <span className="text-xs text-gray-400">Health Score</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <h1 className="text-3xl sm:text-4xl font-display font-extrabold mb-1 text-gray-900 leading-tight">
                         {product?.name || 'Product Analysis'}
                     </h1>
@@ -581,9 +614,9 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
                 {/* -- Disclaimer ---------------------- */}
                 <p className="text-center text-xs text-gray-400 mb-4">{disclaimer}</p>
 
-                {/* -- Action row (removed big chat button) -- */}
-                <div className="flex items-center justify-center pb-20">
-                    <button onClick={onReset} className="btn-primary text-base px-8 py-3">
+                {/* -- Action row -- */}
+                <div className="flex items-center justify-center pb-8">
+                    <button onClick={onReset} className="btn-primary text-base px-8 py-3 min-h-[48px]">
                         Scan Another Product
                     </button>
                 </div>

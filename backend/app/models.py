@@ -108,3 +108,22 @@ class UnknownIngredientSubmission(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+# ──────────────────────────────────────────────
+# Scan History (per user, for revisiting past scans)
+# ──────────────────────────────────────────────
+class ScanHistory(Base):
+    __tablename__ = "scan_history"
+
+    id = Column(String, primary_key=True, default=_new_uuid)
+    user_id = Column(String, nullable=False, index=True)    # Supabase sub
+    session_id = Column(String, nullable=False, index=True)  # links to sessions table
+    product_name = Column(String, default="")
+    brand = Column(String, default="")
+    barcode = Column(String, nullable=True)
+    score = Column(Integer, nullable=True)
+    grade = Column(String, nullable=True)
+    scan_type = Column(String, default="barcode")    # barcode | label
+    profile_name = Column(String, default="")        # which profile was used
+    created_at = Column(DateTime, server_default=func.now())
+
+

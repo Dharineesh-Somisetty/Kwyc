@@ -128,6 +128,20 @@
 
 @layer utilities {
 
+  /* Safe area padding for bottom nav (notch devices) */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Scrollbar hide utility */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
   /* Custom animations */
   @keyframes gradientShift {
     0% {

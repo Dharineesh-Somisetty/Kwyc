@@ -1,31 +1,60 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import ScanPage from './components/ScanPage';
 import ResultsPage from './components/ResultsPage';
-import AccountDrawer from './components/AccountDrawer';
 import ProfilesManagePage from './components/ProfilesManagePage';
+import HistoryPage from './components/HistoryPage';
+import SettingsPage from './components/SettingsPage';
+import OnboardingFlow from './components/OnboardingFlow';
+import LoadingAnalysis from './components/LoadingAnalysis';
+import BottomNav from './components/BottomNav';
+import ErrorBoundary from './components/ErrorBoundary';
 import BrandLogo from './components/BrandLogo';
 import { scanBarcode, scanLabel } from './services/api';
+import { createProfile, listProfiles } from './services/profileApi';
 import evaluateOcrQuality from './utils/evaluateOcrQuality';
 
 function AppInner() {
   const { session, user, loading: authLoading, signOut } = useAuth();
   const [authView, setAuthView] = useState('login'); // 'login' | 'signup'
 
-  const [view, setView] = useState('scan');       // 'scan' | 'loading' | 'results' | 'profiles'
+  // ── View & tab state ─────────────────────────────
+  const [activeTab, setActiveTab] = useState('scan');  // 'scan' | 'history' | 'profiles' | 'settings'
+  const [view, setView] = useState('scan');            // 'scan' | 'loading' | 'results' | 'onboarding'
   const [analysisResult, setAnalysisResult] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lastBarcode, setLastBarcode] = useState('');
   const [scoredForName, setScoredForName] = useState('');
-  const [showAccountDrawer, setShowAccountDrawer] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // OCR quality gate: when label OCR is poor, stay on scan view with quality info
-  const [ocrQualityInfo, setOcrQualityInfo] = useState(null); // { ok, reasons, rawText, result }
+  // OCR quality gate
+  const [ocrQualityInfo, setOcrQualityInfo] = useState(null);
 
-  // Show a simple spinner while Supabase checks the session
+  // ── Check if user needs onboarding ────────────────
+  useEffect(() => {
+    if (!session || !user) return;
+    const onboardingDone = localStorage.getItem(`kwyc_onboarded_${user.id}`);
+    if (onboardingDone) return;
+
+    // Check if user has any profiles
+    listProfiles()
+      .then((profiles) => {
+        if (profiles.length === 0) {
+          setShowOnboarding(true);
+          setView('onboarding');
+        } else {
+          localStorage.setItem(`kwyc_onboarded_${user.id}`, '1');
+        }
+      })
+      .catch(() => {
+        // Silently skip onboarding check on error
+      });
+  }, [session, user]);
+
+  // Show spinner while Supabase checks session
   if (authLoading) {
     return (
       <div className="min-h-screen bg-bg1 flex items-center justify-center">
@@ -34,7 +63,7 @@ function AppInner() {
     );
   }
 
-  // Not logged in -> show auth pages
+  // Not logged in -> auth pages
   if (!session) {
     if (authView === 'signup') {
       return <Signup onSwitch={() => setAuthView('login')} />;
@@ -42,6 +71,27 @@ function AppInner() {
     return <Login onSwitch={() => setAuthView('signup')} />;
   }
 
+  // ── Onboarding flow ───────────────────────────────
+  if (showOnboarding && view === 'onboarding') {
+    return (
+      <OnboardingFlow
+        onComplete={async (profileData) => {
+          if (profileData) {
+            try {
+              await createProfile(profileData);
+            } catch {
+              // Profile creation failed, still continue
+            }
+          }
+          localStorage.setItem(`kwyc_onboarded_${user.id}`, '1');
+          setShowOnboarding(false);
+          setView('scan');
+        }}
+      />
+    );
+  }
+
+  // ── Scan handler ──────────────────────────────────
   const handleScanResult = async ({ type, barcode, imageFile, userProfile, profileId, profileName, skipQualityCheck }) => {
     setError(null);
     setOcrQualityInfo(null);
@@ -59,13 +109,14 @@ function AppInner() {
         result = await scanLabel(imageFile, userProfile, barcodeToSend, profileId);
         setLastBarcode('');
 
-        // OCR quality gate for label scans (unless user chose "continue anyway")
+        // OCR quality gate for label scans
         if (!skipQualityCheck) {
           const rawText = result.ingredients_raw_text || '';
           const quality = evaluateOcrQuality(rawText);
           if (!quality.ok) {
             setOcrQualityInfo({ ...quality, rawText, result });
             setView('scan');
+            setActiveTab('scan');
             setIsLoading(false);
             return;
           }
@@ -74,12 +125,16 @@ function AppInner() {
       setAnalysisResult(result);
       setView('results');
     } catch (err) {
-      const msg =
-        err.response?.data?.detail ||
-        err.message ||
-        'Something went wrong. Please try again.';
+      const status = err.response?.status;
+      let msg;
+      if (status === 429) {
+        msg = 'You\'ve reached the scan limit. Please wait a moment and try again.';
+      } else {
+        msg = err.response?.data?.detail || err.message || 'Something went wrong. Please try again.';
+      }
       setError(msg);
       setView('scan');
+      setActiveTab('scan');
     } finally {
       setIsLoading(false);
     }
@@ -87,18 +142,42 @@ function AppInner() {
 
   const handleReset = () => {
     setView('scan');
+    setActiveTab('scan');
     setAnalysisResult(null);
     setError(null);
     setLastBarcode('');
   };
 
+  // ── Tab handler ────────────────────────────────────
+  const handleTabChange = (tab) => {
+    if (view === 'loading') return;
+    setActiveTab(tab);
+    if (tab === 'scan') {
+      setView('scan');
+    } else {
+      setView(tab);
+    }
+    setError(null);
+  };
+
+  // ── View from history ──────────────────────────────
+  const handleViewHistoryResult = (result) => {
+    setAnalysisResult(result);
+    setScoredForName('');
+    setView('results');
+  };
+
+  // Determine if bottom nav should show
+  const showBottomNav = view !== 'loading' && view !== 'results';
+
   return (
     <div className="min-h-screen bg-bg1">
-      {/* Top bar with user info + menu */}
-      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-gray-100 px-4 py-2 flex items-center justify-between">
+      {/* ── Top bar ──────────────────────────────── */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-2 flex items-center justify-between">
         <button
-          onClick={() => { if (view !== 'loading') setView('scan'); }}
-          className="flex items-center gap-2 min-w-0 text-left"
+          onClick={() => handleTabChange('scan')}
+          className="flex items-center gap-2 min-w-0 text-left min-h-[44px]"
+          aria-label="Go to home / scan page"
         >
           <BrandLogo variant="icon" className="h-9 w-9 shrink-0" />
           <div className="min-w-0">
@@ -115,71 +194,83 @@ function AppInner() {
           <span className="hidden sm:block text-sm text-gray-500 truncate max-w-[220px]">
             {user?.email}
           </span>
-          <button
-            onClick={() => setShowAccountDrawer(true)}
-            className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500 hover:text-brandDeep"
-            title="Account menu"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-            </svg>
-          </button>
         </div>
       </div>
 
-      {/* Error toast */}
+      {/* ── Error toast (with rate limit awareness) ──── */}
       {error && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-white border border-red-200 text-red-600 px-6 py-3 rounded-xl text-sm shadow-lg animate-slide-up flex items-center gap-3">
+        <div
+          className={`fixed top-14 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl text-sm shadow-lg animate-slide-up flex items-center gap-3 max-w-[90vw] ${
+            error.includes('limit')
+              ? 'bg-amber-50 border border-amber-200 text-amber-700'
+              : 'bg-white border border-red-200 text-red-600'
+          }`}
+          role="alert"
+        >
+          {error.includes('limit') && (
+            <svg className="w-5 h-5 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">&#x2715;</button>
+          <button onClick={() => setError(null)} className="text-current opacity-60 hover:opacity-100 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Dismiss error">&#x2715;</button>
         </div>
       )}
 
-      {view === 'scan' && (
-        <ScanPage
-          onScanResult={handleScanResult}
-          isLoading={isLoading}
-          lastFailedBarcode={lastBarcode}
-          ocrQualityInfo={ocrQualityInfo}
-          onAcceptPendingResult={() => {
-            if (ocrQualityInfo?.result) {
-              setAnalysisResult(ocrQualityInfo.result);
-              setOcrQualityInfo(null);
-              setView('results');
-            }
-          }}
-          onClearOcrQuality={() => setOcrQualityInfo(null)}
-        />
-      )}
+      {/* ── Main content ─────────────────────────── */}
+      <div className={showBottomNav ? 'pb-20' : ''}>
+        {view === 'scan' && (
+          <ErrorBoundary fallbackMessage="The scanner encountered an error. Please try again.">
+            <ScanPage
+              onScanResult={handleScanResult}
+              isLoading={isLoading}
+              lastFailedBarcode={lastBarcode}
+              ocrQualityInfo={ocrQualityInfo}
+              onAcceptPendingResult={() => {
+                if (ocrQualityInfo?.result) {
+                  setAnalysisResult(ocrQualityInfo.result);
+                  setOcrQualityInfo(null);
+                  setView('results');
+                }
+              }}
+              onClearOcrQuality={() => setOcrQualityInfo(null)}
+            />
+          </ErrorBoundary>
+        )}
 
-      {view === 'loading' && (
-        <div className="min-h-screen bg-bg1 flex items-center justify-center">
-          <div className="bg-white border border-gray-100 rounded-3xl shadow-card p-12 text-center animate-fade-in max-w-sm">
-            <div className="w-16 h-16 mx-auto mb-6 rounded-full border-4 border-gray-200 border-t-brand animate-spin" />
-            <h2 className="text-2xl font-bold mb-3 gradient-text">Analyzing...</h2>
-            <p className="text-gray-500 text-sm">Identifying ingredients, checking conflicts, and generating your personalized summary.</p>
-            <div className="mt-6 w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-brandDeep to-brandSoft rounded-full animate-pulse" style={{ width: '70%' }} />
-            </div>
-          </div>
-        </div>
-      )}
+        {view === 'loading' && <LoadingAnalysis />}
 
-      {view === 'results' && analysisResult && (
-        <ResultsPage data={analysisResult} onReset={handleReset} scoredForName={scoredForName} />
-      )}
+        {view === 'results' && analysisResult && (
+          <ErrorBoundary fallbackMessage="Could not display results. Please scan again.">
+            <ResultsPage data={analysisResult} onReset={handleReset} scoredForName={scoredForName} />
+          </ErrorBoundary>
+        )}
 
-      {view === 'profiles' && (
-        <ProfilesManagePage onBack={() => setView('scan')} />
-      )}
+        {view === 'history' && (
+          <ErrorBoundary fallbackMessage="Could not load history.">
+            <HistoryPage onViewResult={handleViewHistoryResult} />
+          </ErrorBoundary>
+        )}
 
-      {/* Account drawer */}
-      {showAccountDrawer && (
-        <AccountDrawer
-          email={user?.email}
-          onClose={() => setShowAccountDrawer(false)}
-          onManageProfiles={() => setView('profiles')}
-          onSignOut={signOut}
+        {view === 'profiles' && (
+          <ErrorBoundary fallbackMessage="Could not load profiles.">
+            <ProfilesManagePage onBack={() => handleTabChange('scan')} />
+          </ErrorBoundary>
+        )}
+
+        {view === 'settings' && (
+          <ErrorBoundary fallbackMessage="Could not load settings.">
+            <SettingsPage />
+          </ErrorBoundary>
+        )}
+      </div>
+
+      {/* ── Bottom navigation ────────────────────── */}
+      {showBottomNav && (
+        <BottomNav
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          disabled={isLoading}
         />
       )}
     </div>

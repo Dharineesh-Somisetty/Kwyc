@@ -2,25 +2,43 @@
  * AccountDrawer – slide-in side drawer for account menu.
  * Shows: user email, Manage Profiles link, Sign Out.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export default function AccountDrawer({ email, onClose, onManageProfiles, onSignOut }) {
+  const drawerRef = useRef(null);
+
   useEffect(() => {
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+
+    // Focus trap: focus the drawer when it opens
+    const timer = setTimeout(() => {
+      drawerRef.current?.focus();
+    }, 100);
+
+    // Close on Escape
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = '';
+      clearTimeout(timer);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex">
+    <div className="fixed inset-0 z-50 flex" role="dialog" aria-modal="true" aria-label="Account menu">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
 
       {/* Drawer panel (right side) */}
-      <div className="ml-auto relative z-10 w-72 max-w-[85vw] bg-white h-full shadow-xl flex flex-col animate-slide-in-right">
+      <div ref={drawerRef} tabIndex={-1} className="ml-auto relative z-10 w-72 max-w-[85vw] bg-white h-full shadow-xl flex flex-col animate-slide-in-right outline-none">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h2 className="text-lg font-bold text-gray-800">Account</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">&#x2715;</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Close account menu">&#x2715;</button>
         </div>
 
         {/* User info */}

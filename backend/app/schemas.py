@@ -266,3 +266,22 @@ class ProfileResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+# ──────────────────────────────────────────────
+# Scan History schemas
+# ──────────────────────────────────────────────
+class ScanHistoryResponse(BaseModel):
+    id: str
+    session_id: str
+    product_name: str = ""
+    brand: str = ""
+    barcode: Optional[str] = None
+    score: Optional[int] = None
+    grade: Optional[str] = None
+    scan_type: str = "barcode"
+    profile_name: str = ""
+    created_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+

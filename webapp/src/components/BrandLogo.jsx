@@ -89,7 +89,7 @@ export default function BrandLogo({
       <img
         src={kwycLockup}
         alt="KWYC logo"
-        className={`w-full max-w-[16rem] sm:max-w-[18rem] mx-auto ${className}`.trim()}
+        className={`w-full max-w-[22rem] sm:max-w-[26rem] mx-auto ${className}`.trim()}
       />
     );
   }

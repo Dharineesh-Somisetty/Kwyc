@@ -33,6 +33,7 @@ from .schemas import (
     ProductScore, Nutrition, NutritionFacts, LabelExtraction,
     PortionInfo, NutritionScoreInfo,
     ProfileCreate, ProfileUpdate, ProfileResponse,
+    ScanHistoryResponse,
 )
 from .auth import AuthUser, get_current_user, get_optional_user
 from .services.off_service import fetch_product_from_off
@@ -355,7 +356,14 @@ def set_default_profile(
 
 
 # ── Helpers ──────────────────────────────────────────────────────
-def _save_session(db: DBSession, result: AnalysisResult, profile: UserProfile):
+def _save_session(
+    db: DBSession,
+    result: AnalysisResult,
+    profile: UserProfile,
+    user_id: str | None = None,
+    scan_type: str = "barcode",
+    profile_name: str = "",
+):
     row = models.Session(
         session_id=result.session_id,
         product_json=result.product.model_dump_json(),
@@ -364,6 +372,25 @@ def _save_session(db: DBSession, result: AnalysisResult, profile: UserProfile):
     )
     db.merge(row)
     db.commit()
+
+    # Save to scan history if user is authenticated
+    if user_id:
+        try:
+            history_row = models.ScanHistory(
+                user_id=user_id,
+                session_id=result.session_id,
+                product_name=result.product.name or "",
+                brand=result.product.brand or "",
+                barcode=result.product.barcode,
+                score=result.product_score.score if result.product_score else None,
+                grade=result.product_score.grade if result.product_score else None,
+                scan_type=scan_type,
+                profile_name=profile_name,
+            )
+            db.add(history_row)
+            db.commit()
+        except Exception as exc:
+            logger.warning("Failed to save scan history: %s", exc)
 
 
 def _get_session(db: DBSession, session_id: str) -> models.Session | None:
@@ -424,6 +451,9 @@ async def _run_analysis_pipeline(
     nutrition: Optional[Nutrition] = None,
     product_categories: Optional[list[str]] = None,
     nutrition_per_serving: Optional[NutritionFacts] = None,
+    user_id: str | None = None,
+    scan_type: str = "barcode",
+    profile_name: str = "",
 ) -> AnalysisResult:
     """Shared pipeline: structure → KB → rules → score → summary → persist."""
 
@@ -494,7 +524,7 @@ async def _run_analysis_pipeline(
         result.personalized_summary = "Summary unavailable – please try again."
 
     # 7. Persist
-    _save_session(db, result, profile)
+    _save_session(db, result, profile, user_id=user_id, scan_type=scan_type, profile_name=profile_name)
 
     return result
 
@@ -566,6 +596,8 @@ async def scan_barcode(
             nutrition=nutrition_obj,
             product_categories=categories,
             nutrition_per_serving=cached_nutrition_per_serving,
+            user_id=user.sub if user else None,
+            scan_type="barcode",
         )
 
         # Tag nutrition provenance on the result (backward-compatible)
@@ -617,6 +649,8 @@ async def scan_barcode(
             cached["ingredients_text"], product, profile, db,
             nutrition=nutrition_obj,
             nutrition_per_serving=cached_nutrition_per_serving,
+            user_id=user.sub if user else None,
+            scan_type="barcode",
         )
 
         result.nutrition_status = "extracted_photo" if has_usable else "not_detected"
@@ -703,6 +737,8 @@ async def scan_label(
         ingredients_text, product, profile, db,
         nutrition=nutrition_obj,
         nutrition_per_serving=extraction.nutrition,
+        user_id=user.sub if user else None,
+        scan_type="label",
     )
 
     # 5. Attach extraction data to response (backward-compatible additions)
@@ -860,3 +896,65 @@ def get_ingredient_submissions(
         }
         for s in submissions
     ]
+
+
+# ── Scan History endpoints ───────────────────────────────────────
+@app.get("/api/history", response_model=list[ScanHistoryResponse])
+def get_scan_history(
+    limit: int = 50,
+    offset: int = 0,
+    user: AuthUser = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """List the user's scan history, most recent first."""
+    rows = (
+        db.query(models.ScanHistory)
+        .filter(models.ScanHistory.user_id == user.sub)
+        .order_by(models.ScanHistory.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return [ScanHistoryResponse.model_validate(r) for r in rows]
+
+
+@app.get("/api/history/search", response_model=list[ScanHistoryResponse])
+def search_scan_history(
+    q: str = "",
+    limit: int = 20,
+    user: AuthUser = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Search user's scan history by product name, brand, or barcode."""
+    if not q.strip():
+        return []
+    query = db.query(models.ScanHistory).filter(
+        models.ScanHistory.user_id == user.sub,
+    )
+    search_term = f"%{q.strip().lower()}%"
+    query = query.filter(
+        (func.lower(models.ScanHistory.product_name).like(search_term))
+        | (func.lower(models.ScanHistory.brand).like(search_term))
+        | (models.ScanHistory.barcode.like(search_term))
+    )
+    rows = query.order_by(models.ScanHistory.created_at.desc()).limit(limit).all()
+    return [ScanHistoryResponse.model_validate(r) for r in rows]
+
+
+@app.get("/api/history/{history_id}/result")
+def get_history_result(
+    history_id: str,
+    user: AuthUser = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Retrieve the full analysis result for a historical scan."""
+    history = db.query(models.ScanHistory).filter(
+        models.ScanHistory.id == history_id,
+        models.ScanHistory.user_id == user.sub,
+    ).first()
+    if not history:
+        raise HTTPException(404, "History entry not found.")
+    session = _get_session(db, history.session_id)
+    if not session:
+        raise HTTPException(404, "Session data not found.")
+    return json.loads(session.analysis_json)

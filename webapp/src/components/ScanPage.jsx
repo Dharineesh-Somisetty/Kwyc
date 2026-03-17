@@ -190,11 +190,14 @@ const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '', ocrQualityI
                     )}
 
                     {/* ── Upload / Camera segmented toggle ── */}
-                    <div className="flex justify-center mb-5">
+                    <div className="flex justify-center mb-5" role="tablist" aria-label="Label input mode">
                         <div className="inline-flex bg-gray-100 rounded-full p-1">
                             <button
+                                role="tab"
+                                aria-selected={labelMode === 'upload'}
+                                aria-label="Upload label photo"
                                 onClick={() => setLabelMode('upload')}
-                                className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                                className={`px-5 py-2 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 min-h-[40px] ${
                                     labelMode === 'upload' ? 'bg-brand text-white shadow' : 'text-gray-500 hover:text-brandDeep'
                                 }`}
                             >
@@ -204,8 +207,11 @@ const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '', ocrQualityI
                                 Upload
                             </button>
                             <button
+                                role="tab"
+                                aria-selected={labelMode === 'camera'}
+                                aria-label="Use camera to capture label"
                                 onClick={() => setLabelMode('camera')}
-                                className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                                className={`px-5 py-2 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 min-h-[40px] ${
                                     labelMode === 'camera' ? 'bg-brand text-white shadow' : 'text-gray-500 hover:text-brandDeep'
                                 }`}
                             >
@@ -436,19 +442,25 @@ const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '', ocrQualityI
                     <h3 className="text-lg font-semibold mb-4 text-gray-700 text-center">Scan or Enter Barcode</h3>
 
                     {/* Segmented control */}
-                    <div className="flex justify-center mb-5">
+                    <div className="flex justify-center mb-5" role="tablist" aria-label="Barcode input mode">
                         <div className="inline-flex bg-gray-100 rounded-full p-1">
                             <button
+                                role="tab"
+                                aria-selected={!isCameraMode}
+                                aria-label="Enter barcode manually"
                                 onClick={() => setIsCameraMode(false)}
-                                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${
+                                className={`px-4 py-2 rounded-full text-sm font-semibold transition-all min-h-[40px] ${
                                     !isCameraMode ? 'bg-brand text-white shadow' : 'text-gray-500 hover:text-brandDeep'
                                 }`}
                             >
                                 Manual
                             </button>
                             <button
+                                role="tab"
+                                aria-selected={isCameraMode}
+                                aria-label="Scan barcode with camera"
                                 onClick={() => setIsCameraMode(true)}
-                                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${
+                                className={`px-4 py-2 rounded-full text-sm font-semibold transition-all min-h-[40px] ${
                                     isCameraMode ? 'bg-brand text-white shadow' : 'text-gray-500 hover:text-brandDeep'
                                 }`}
                             >
@@ -465,12 +477,14 @@ const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '', ocrQualityI
                                 value={barcode}
                                 onChange={e => setBarcode(e.target.value)}
                                 placeholder="Enter barcode number..."
+                                aria-label="Barcode number"
                                 className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-gray-800 placeholder-gray-400 focus:outline-none focus:border-brand transition-colors"
                             />
                             <button
                                 type="submit"
                                 disabled={isLoading || !barcode}
-                                className="btn-primary px-5 py-3 disabled:opacity-40"
+                                aria-label="Search barcode"
+                                className="btn-primary min-w-[48px] min-h-[48px] px-5 py-3 disabled:opacity-40 flex items-center justify-center"
                             >
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
