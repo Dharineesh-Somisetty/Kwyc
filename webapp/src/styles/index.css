@@ -99,11 +99,11 @@
 
   /* Desktop flank decorative cards */
   .flank-card {
-    @apply bg-white/60 border border-gray-100 rounded-2xl p-4 max-w-[180px];
+    @apply bg-white border border-gray-100 rounded-2xl p-4 shadow-sm;
   }
 
   .flank-tip-card {
-    @apply bg-brandTint/50 border border-brandLine/40 rounded-2xl p-3.5 max-w-[180px];
+    @apply bg-brandTint border border-brandLine/60 rounded-2xl p-4 shadow-sm;
   }
 
   /* Nutrition chip */
