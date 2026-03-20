@@ -5,7 +5,7 @@ import ProfileSelector from './ProfileSelector';
 import useCameraCapture from '../hooks/useCameraCapture';
 import BrandLogo from './BrandLogo';
 
-const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '', ocrQualityInfo, onAcceptPendingResult, onClearOcrQuality }) => {
+const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '', ocrQualityInfo, onAcceptPendingResult, onClearOcrQuality, onNavigateHowTo }) => {
     const [barcode, setBarcode] = useState('');
     const [isCameraMode, setIsCameraMode] = useState(false);
     const [selectedImage, setSelectedImage] = useState(null);
@@ -161,6 +161,25 @@ const ScanPage = ({ onScanResult, isLoading, lastFailedBarcode = '', ocrQualityI
                         Scan a barcode or upload a label photo to get personalized ingredient insights.
                     </p>
                 </div>
+
+                {/* How it works card */}
+                <button
+                    onClick={onNavigateHowTo}
+                    className="w-full mb-6 glass-strong px-5 py-4 flex items-center gap-4 text-left hover:shadow-card-hover transition-all group"
+                >
+                    <div className="w-10 h-10 rounded-xl bg-brandTint flex items-center justify-center shrink-0">
+                        <svg className="w-5 h-5 text-brandDeep" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+                        </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <span className="block text-sm font-bold text-gray-800">How it works</span>
+                        <span className="block text-xs text-gray-400 mt-0.5">Learn how to scan barcodes & upload nutrition labels</span>
+                    </div>
+                    <svg className="w-4 h-4 text-gray-300 group-hover:text-brandDeep transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                    </svg>
+                </button>
 
                 {/* Profile Selector */}
                 <div className="mb-8 animate-slide-up">

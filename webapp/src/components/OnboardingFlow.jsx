@@ -13,7 +13,7 @@ const DIET_OPTIONS = [
   { value: 'halal', label: 'Halal' },
 ];
 
-export default function OnboardingFlow({ onComplete }) {
+export default function OnboardingFlow({ onComplete, onNavigateHowTo }) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
   const [allergies, setAllergies] = useState([]);
@@ -52,9 +52,17 @@ export default function OnboardingFlow({ onComplete }) {
       <button onClick={() => setStep(1)} className="btn-primary text-sm px-8 py-3">
         Get Started
       </button>
+      {onNavigateHowTo && (
+        <button
+          onClick={onNavigateHowTo}
+          className="block mx-auto mt-4 text-xs text-brandDeep hover:text-brandDeep/80 underline underline-offset-2"
+        >
+          Learn how to use the app
+        </button>
+      )}
       <button
         onClick={() => onComplete(null)}
-        className="block mx-auto mt-4 text-xs text-gray-400 hover:text-gray-600"
+        className="block mx-auto mt-3 text-xs text-gray-400 hover:text-gray-600"
       >
         Skip for now
       </button>

@@ -97,6 +97,15 @@
     @apply badge bg-brandTint text-brandDeep border border-brandLine;
   }
 
+  /* Desktop flank decorative cards */
+  .flank-card {
+    @apply bg-white/60 border border-gray-100 rounded-2xl p-4 max-w-[180px];
+  }
+
+  .flank-tip-card {
+    @apply bg-brandTint/50 border border-brandLine/40 rounded-2xl p-3.5 max-w-[180px];
+  }
+
   /* Nutrition chip */
   .nut-chip {
     @apply bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-center min-w-[5rem];
