@@ -1,4 +1,4 @@
-# LabelLens
+# Kwyc (Know what you consume)
 
 AI-powered food & drink ingredient scanner with personalized conflict detection and product-locked chat.
 
