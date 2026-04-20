@@ -197,6 +197,25 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
     };
     const statCards = buildStatCards();
 
+    /* Build 4-metric nutrient grid */
+    const buildNutrientGrid = () => {
+        if (nutritionView === 'serving' && nutrition_per_serving) {
+            return [
+                { label: 'SUGAR',   value: nutrition_per_serving.total_sugars_g,  unit: 'g', max: 50,  warnThreshold: 12, cardClass: 'stat-card-amber',  barColor: '#f59e0b' },
+                { label: 'FAT',     value: nutrition_per_serving.total_fat_g,      unit: 'g', max: 80,  warnThreshold: 20, cardClass: 'stat-card-red',    barColor: '#ef4444' },
+                { label: 'PROTEIN', value: nutrition_per_serving.protein_g,        unit: 'g', max: 50,  warnThreshold: null, cardClass: 'stat-card-blue', barColor: '#0ea5e9' },
+                { label: 'CARBS',   value: nutrition_per_serving.total_carbs_g,    unit: 'g', max: 100, warnThreshold: null, cardClass: 'stat-card-purple', barColor: '#8b5cf6' },
+            ];
+        }
+        return [
+            { label: 'SUGAR',   value: nutrition?.sugars_g_100g,    unit: 'g', max: 50,  warnThreshold: 12,   cardClass: 'stat-card-amber',  barColor: '#f59e0b' },
+            { label: 'SAT FAT', value: nutrition?.sat_fat_g_100g,   unit: 'g', max: 40,  warnThreshold: 10,   cardClass: 'stat-card-red',    barColor: '#ef4444' },
+            { label: 'PROTEIN', value: nutrition?.protein_g_100g,   unit: 'g', max: 50,  warnThreshold: null, cardClass: 'stat-card-blue',   barColor: '#0ea5e9' },
+            { label: 'CARBS',   value: null,                         unit: 'g', max: 100, warnThreshold: null, cardClass: 'stat-card-purple', barColor: '#8b5cf6' },
+        ];
+    };
+    const nutrientGrid = buildNutrientGrid();
+
     /* Active reasons/penalties for the current view */
     const activeReasons = activeNutScore?.reasons ?? product_score?.reasons ?? [];
     const activePenalties = activeNutScore?.penalties ?? product_score?.penalties ?? [];
@@ -261,25 +280,45 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
                    ╚══════════════════════════════════════╝ */}
                 {flags.length > 0 && (
                     <div className="glass-strong p-6 mb-4 animate-fade-in">
-                        <h2 className="text-lg font-bold mb-3 text-gray-800">Flags</h2>
-                        <div className="space-y-3">
-                            {flags.map((f, i) => (
-                                <div key={i} className={`border-l-4 rounded-2xl p-4 ${severityColor[f.severity] || severityColor.info}`}>
-                                    <div className="flex items-start gap-2">
-                                        <div>
-                                            <span className="font-semibold text-sm uppercase tracking-wide">
-                                                {f.type.replace('_', ' ')}
-                                            </span>
-                                            <p className="mt-1 text-sm">{f.message}</p>
+                        <h2 className="text-lg font-bold mb-4 text-gray-800 font-headline">
+                            {flags.some(f => f.severity === 'high' || f.severity === 'warn') ? 'Red Flags' : 'Flags'}
+                        </h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {flags.map((f, i) => {
+                                const isHigh = f.severity === 'high';
+                                const isWarn = f.severity === 'warn';
+                                const cardBg = isHigh ? 'bg-red-50 border-red-100' : isWarn ? 'bg-amber-50 border-amber-100' : 'bg-brandTint border-brandLine';
+                                const iconBg = isHigh ? 'bg-red-100' : isWarn ? 'bg-amber-100' : 'bg-brandLine/40';
+                                const iconColor = isHigh ? 'text-red-600' : isWarn ? 'text-amber-600' : 'text-brandDeep';
+                                const labelColor = isHigh ? 'text-red-700' : isWarn ? 'text-amber-700' : 'text-brandDeep';
+                                const bodyColor = isHigh ? 'text-red-600' : isWarn ? 'text-amber-600' : 'text-brandDeep/80';
+                                return (
+                                    <div key={i} className={`flex items-start gap-3 rounded-2xl border p-4 ${cardBg}`}>
+                                        <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${iconBg}`}>
+                                            {isHigh || isWarn ? (
+                                                <svg className={`w-4 h-4 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                                </svg>
+                                            ) : (
+                                                <svg className={`w-4 h-4 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className={`text-xs font-bold uppercase tracking-wide mb-0.5 ${labelColor}`}>
+                                                {f.type.replace(/_/g, ' ')}
+                                            </p>
+                                            <p className={`text-xs leading-snug ${bodyColor}`}>{f.message}</p>
                                             {f.related_ingredients.length > 0 && (
-                                                <p className="mt-1 text-xs opacity-70">
-                                                    Related: {f.related_ingredients.join(', ')}
+                                                <p className="mt-1 text-[10px] text-gray-400">
+                                                    {f.related_ingredients.join(', ')}
                                                 </p>
                                             )}
                                         </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -403,28 +442,31 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
                             )}
                         </div>
 
-                        {/* Stats cards column */}
+                        {/* Nutrient Profile — 4-metric big-number grid */}
                         <div className="lg:col-span-7 flex flex-col">
                             <div className="flex items-center justify-between mb-3">
-                                <h2 className="text-lg font-bold text-gray-700">Nutrient Stats</h2>
+                                <h2 className="text-lg font-bold text-gray-700 font-headline">Nutrient Profile</h2>
                                 <span className="text-xs text-gray-400">
                                     {nutritionView === 'serving' ? 'per serving' : 'per 100 g'}
                                 </span>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 flex-1">
-                                {statCards.map((c, i) => {
-                                    const isWarn = typeof c.warn === 'function' && c.value != null && c.warn(c.value);
+                            <div className="grid grid-cols-2 gap-3 flex-1">
+                                {nutrientGrid.map((c, i) => {
+                                    const val = c.value;
+                                    const pct = val != null ? Math.min(100, (val / c.max) * 100) : 0;
+                                    const isWarn = c.warnThreshold != null && val != null && val > c.warnThreshold;
                                     return (
                                         <div key={i} className={c.cardClass}>
-                                            <div className="flex items-start justify-between">
-                                                <div>
-                                                    <p className="text-sm font-semibold text-gray-500 mb-1">{c.label}</p>
-                                                    <p className={`text-3xl font-bold ${isWarn ? 'text-amber-700' : 'text-gray-800'}`}>
-                                                        {c.value != null ? (Number.isFinite(c.value) ? parseFloat(c.value.toFixed(1)) : c.value) : '--'}
-                                                        <span className="text-base font-normal text-gray-500 ml-1">{c.unit}</span>
-                                                    </p>
-                                                </div>
-                                                <Sparkline color={c.color} width={56} height={24} variant={c.sparkVariant} />
+                                            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1">{c.label}</p>
+                                            <p className="text-4xl font-extrabold font-headline leading-none text-gray-800 mb-0.5">
+                                                {val != null ? parseFloat(val.toFixed(1)) : '--'}
+                                                <span className="text-base font-normal text-gray-400 ml-1">{c.unit}</span>
+                                            </p>
+                                            <div className="mt-3 h-1.5 rounded-full bg-gray-200/60 overflow-hidden">
+                                                <div
+                                                    className="h-full rounded-full transition-all duration-700"
+                                                    style={{ width: `${pct}%`, backgroundColor: isWarn ? '#ef4444' : c.barColor }}
+                                                />
                                             </div>
                                         </div>
                                     );
@@ -619,39 +661,50 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
                             const concern = getIngredientConcern(ing, matchInfo, flags);
 
                             return (
-                                <div key={i} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        {/* Concern dot indicator */}
-                                        <div className={`flex-shrink-0 w-2 h-2 rounded-full ${
-                                            concern === 'high' ? 'bg-red-500' :
-                                            concern === 'allergen' ? 'bg-amber-500' :
-                                            concern === 'warn' ? 'bg-orange-400' :
-                                            'bg-emerald-400'
-                                        }`} />
-                                        <span className="text-gray-800 font-medium capitalize text-sm truncate">{ing.name_canonical}</span>
-                                        {ing.notes && <span className="text-gray-400 text-xs shrink-0">({ing.notes})</span>}
-                                    </div>
-                                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                                        {matchStatus === 'unknown' && (
-                                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-semibold">
-                                                Unknown
-                                            </span>
-                                        )}
-                                        {concern === 'high' && (
-                                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200 font-semibold uppercase tracking-wide">
-                                                High Concern
-                                            </span>
-                                        )}
-                                        {concern === 'allergen' && (
-                                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-semibold uppercase tracking-wide">
-                                                Allergen Risk
-                                            </span>
-                                        )}
-                                        {concern === 'warn' && (
-                                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200 font-semibold uppercase tracking-wide">
-                                                Low Concern
-                                            </span>
-                                        )}
+                                <div key={i} className={`rounded-2xl border p-4 transition-all hover:shadow-glass ${
+                                    concern === 'high'     ? 'bg-red-50/60 border-red-100' :
+                                    concern === 'allergen' ? 'bg-amber-50/60 border-amber-100' :
+                                    concern === 'warn'     ? 'bg-orange-50/40 border-orange-100' :
+                                    'bg-gray-50 border-gray-100'
+                                }`}>
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="text-gray-800 font-semibold capitalize text-sm leading-tight">{ing.name_canonical}</p>
+                                            {ing.notes && (
+                                                <p className="text-gray-400 text-xs mt-0.5">{ing.notes}</p>
+                                            )}
+                                            {ing.tags?.length > 0 && (
+                                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                                    {ing.tags.slice(0, 2).map((tag, ti) => (
+                                                        <span key={ti} className="text-[9px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">
+                                                            {tag.replace(/_/g, ' ')}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col items-end gap-1 shrink-0">
+                                            {matchStatus === 'unknown' && (
+                                                <span className="text-[10px] px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-bold uppercase tracking-wide">
+                                                    Unknown
+                                                </span>
+                                            )}
+                                            {concern === 'high' && (
+                                                <span className="text-[10px] px-2.5 py-1 rounded-full bg-red-100 text-red-700 border border-red-200 font-bold uppercase tracking-wide">
+                                                    High Concern
+                                                </span>
+                                            )}
+                                            {concern === 'allergen' && (
+                                                <span className="text-[10px] px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-bold uppercase tracking-wide">
+                                                    Allergen Risk
+                                                </span>
+                                            )}
+                                            {concern === 'warn' && (
+                                                <span className="text-[10px] px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-100 font-bold uppercase tracking-wide">
+                                                    Low Concern
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -660,11 +713,13 @@ const ResultsPage = ({ data, onReset, scoredForName }) => {
                     {ingredients.length > 5 && (
                         <button
                             onClick={() => setShowAllIngredients(v => !v)}
-                            className="mt-3 w-full text-center text-sm font-semibold text-brandDeep hover:text-brand transition-colors py-2"
+                            className="mt-3 w-full flex items-center justify-center gap-2 text-sm font-semibold text-cn-primary bg-cn-surface-container-low hover:bg-cn-surface-container rounded-2xl py-3 transition-colors"
                         >
-                            {showAllIngredients
-                                ? 'Show Less ▲'
-                                : `View ${ingredients.length - 5} More Ingredients ▼`}
+                            {showAllIngredients ? (
+                                <>Show Less <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /></svg></>
+                            ) : (
+                                <>View {ingredients.length - 5} More Ingredients <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg></>
+                            )}
                         </button>
                     )}
                 </div>
